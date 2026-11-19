@@ -126,6 +126,55 @@ export function deriveHypotheses(entries: Evidence[]): Hypothesis[] {
       suggestedChecks: rule.checks,
     });
   }
+  const change = recentChangeHypothesis(entries);
+  if (change) out.push(change);
   const rank: Record<Confidence, number> = { high: 0, medium: 1, low: 2 };
   return out.sort((a, b) => rank[a.confidence] - rank[b.confidence]);
+}
+
+const CHANGE_TAGS = ["deploy", "rollout"];
+/** A change only counts as a suspect if the first problem follows it this closely. */
+const CORRELATION_WINDOW_MS = 30 * 60_000;
+const TIGHT_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Looks for a deploy or rollout shortly before the first problem. It is correlation, not proof:
+ * a change that comes after the first problem is never blamed, and the confidence stays modest
+ * unless a recorded deployment and an independent source agree on a tight gap.
+ */
+function recentChangeHypothesis(entries: Evidence[]): Hypothesis | undefined {
+  const isChange = (e: Evidence) => e.tags.some((t) => CHANGE_TAGS.includes(t));
+  const problems = entries.filter((e) => !isChange(e) && e.severity !== "info");
+  const changes = entries.filter(isChange);
+  if (problems.length === 0 || changes.length === 0) return undefined;
+
+  const firstProblem = problems.reduce((a, b) => (Date.parse(b.observedAt) < Date.parse(a.observedAt) ? b : a));
+  const firstProblemMs = Date.parse(firstProblem.observedAt);
+
+  // The change closest before the first problem, within the window.
+  const suspect = changes
+    .filter((c) => {
+      const gap = firstProblemMs - Date.parse(c.observedAt);
+      return gap >= 0 && gap <= CORRELATION_WINDOW_MS;
+    })
+    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
+  if (!suspect) return undefined;
+
+  const gapMs = firstProblemMs - Date.parse(suspect.observedAt);
+  const recordedDeploy = suspect.tags.includes("deploy");
+  const independent = suspect.source !== firstProblem.source;
+  const confidence: Confidence = recordedDeploy ? (gapMs <= TIGHT_WINDOW_MS && independent ? "high" : "medium") : gapMs <= TIGHT_WINDOW_MS ? "medium" : "low";
+  const minutes = Math.round(gapMs / 60_000);
+
+  return {
+    id: "recent-change",
+    title: recordedDeploy ? "Problems began shortly after a deployment" : "Problems began shortly after a rollout",
+    confidence,
+    rationale: `The first problem appeared ${minutes === 0 ? "within a minute" : `${minutes} minute${minutes === 1 ? "" : "s"}`} after the change. This is correlation, not proof.`,
+    evidenceIds: [suspect.id, firstProblem.id],
+    suggestedChecks: [
+      "Compare what the change contained with what is failing.",
+      "If the change is the cause, rolling back is the usual remedy. kube-triage never does that itself.",
+    ],
+  };
 }

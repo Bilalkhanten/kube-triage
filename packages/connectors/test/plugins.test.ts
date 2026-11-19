@@ -3,7 +3,7 @@ import { createDefaultRegistry } from "../src/index.js";
 
 describe("built-in plugins", () => {
   it("registers kubernetes, prometheus and loki", () => {
-    expect(createDefaultRegistry().list().map((p) => p.name)).toEqual(["kubernetes", "prometheus", "loki"]);
+    expect(createDefaultRegistry().list().map((p) => p.name)).toEqual(["kubernetes", "prometheus", "loki", "github-deploys"]);
   });
 
   it("enables Prometheus and Loki only when their URLs are set", () => {
@@ -15,6 +15,13 @@ describe("built-in plugins", () => {
       "prometheus",
       "loki",
     ]);
+  });
+
+  it("enables GitHub deployments only when a repository is set, and validates it", () => {
+    const registry = createDefaultRegistry();
+    const base = { KUBE_TRIAGE_NO_KUBERNETES: "1" };
+    expect(registry.connectorsFromEnv({ ...base, GITHUB_DEPLOYS_REPO: "acme/shop" }).map((c) => c.name)).toEqual(["github-deploys"]);
+    expect(() => registry.connectorsFromEnv({ ...base, GITHUB_DEPLOYS_REPO: "not a repo" })).toThrow(/Invalid repository/);
   });
 
   it("can disable a configured plugin", () => {

@@ -171,6 +171,9 @@ function eventTags(e: KubeEvent): string[] {
   if (reason === "OOMKilling" || /out of memory/i.test(message)) tags.push("oom-killed");
   if (reason === "FailedMount" || reason === "FailedAttachVolume") tags.push("mount-failure");
   if (reason === "Evicted") tags.push("evicted");
+  // A Deployment scaling ReplicaSets is how rollouts show up. It also happens on plain scaling,
+  // so correlation treats it as weaker evidence than a recorded deployment.
+  if (reason === "ScalingReplicaSet") tags.push("rollout");
   return tags;
 }
 

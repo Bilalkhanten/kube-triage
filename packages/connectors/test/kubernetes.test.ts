@@ -108,6 +108,8 @@ describe("KubernetesConnector", () => {
     expect(reasons.some((s) => s.includes("old"))).toBe(false); // outside the window
     expect(reasons.some((s) => s.includes("other service"))).toBe(false);
     expect(events.find((e) => e.summary.includes("FailedScheduling"))?.tags).toEqual(["unschedulable"]);
+    // Rollouts are tagged so they can be correlated with the problems that follow.
+    expect(events.find((e) => e.summary.includes("ScalingReplicaSet"))?.tags).toEqual(["rollout"]);
   });
 
   it("does not require a service filter", async () => {

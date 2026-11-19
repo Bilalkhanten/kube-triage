@@ -109,3 +109,48 @@ describe("investigate", () => {
     await expect(investigate({ ...scope, from: scope.to, to: scope.from }, [good])).rejects.toThrow();
   });
 });
+
+describe("recent-change correlation", () => {
+  const change = (id: string, at: string, over: Partial<EvidenceInput> = {}): EvidenceInput =>
+    ev({ id, observedAt: at, severity: "info", source: "github-deploys", tags: ["deploy"], ...over });
+  const problem = (id: string, at: string, over: Partial<EvidenceInput> = {}): EvidenceInput =>
+    ev({ id, observedAt: at, severity: "critical", tags: ["crash-loop"], ...over });
+  const run = (evidence: EvidenceInput[]) => buildTimeline({ scope, evidence }).hypotheses.find((h) => h.id === "recent-change");
+
+  it("blames a deployment that precedes the first problem, citing both", () => {
+    const h = run([change("d", "2026-01-01T10:15:00Z"), problem("p", "2026-01-01T10:20:00Z")]);
+    expect(h?.title).toMatch(/deployment/);
+    expect(h?.evidenceIds).toEqual(["d", "p"]);
+    expect(h?.rationale).toContain("5 minutes");
+    expect(h?.confidence).toBe("high"); // recorded deploy, tight gap, independent sources
+  });
+
+  it("never blames a change that came after the first problem", () => {
+    expect(run([change("d", "2026-01-01T10:30:00Z"), problem("p", "2026-01-01T10:20:00Z")])).toBeUndefined();
+  });
+
+  it("ignores changes more than 30 minutes before the first problem", () => {
+    expect(run([change("d", "2026-01-01T10:00:00Z"), problem("p", "2026-01-01T10:45:00Z")])).toBeUndefined();
+  });
+
+  it("picks the change closest to the first problem", () => {
+    const h = run([change("old", "2026-01-01T10:05:00Z"), change("new", "2026-01-01T10:18:00Z"), problem("p", "2026-01-01T10:20:00Z")]);
+    expect(h?.evidenceIds[0]).toBe("new");
+  });
+
+  it("is only medium when the evidence is a plain rollout, and low when the gap is wide", () => {
+    const rollout = (id: string, at: string) => change(id, at, { source: "kubernetes", tags: ["rollout"] });
+    expect(run([rollout("r", "2026-01-01T10:15:00Z"), problem("p", "2026-01-01T10:20:00Z")])?.confidence).toBe("medium");
+    expect(run([rollout("r", "2026-01-01T10:00:00Z"), problem("p", "2026-01-01T10:25:00Z")])?.confidence).toBe("low");
+  });
+
+  it("stays medium for a recorded deployment when the gap is wide or the source is the same", () => {
+    expect(run([change("d", "2026-01-01T10:00:00Z"), problem("p", "2026-01-01T10:25:00Z")])?.confidence).toBe("medium");
+    expect(run([change("d", "2026-01-01T10:15:00Z", { source: "kubernetes" }), problem("p", "2026-01-01T10:20:00Z")])?.confidence).toBe("medium");
+  });
+
+  it("does nothing without a change or without a problem", () => {
+    expect(run([problem("p", "2026-01-01T10:20:00Z")])).toBeUndefined();
+    expect(run([change("d", "2026-01-01T10:15:00Z")])).toBeUndefined();
+  });
+});

@@ -6,11 +6,25 @@
     "declarationMap": false,
     "noEmit": true,
     "paths": {
-      "@kube-triage/core": ["./packages/core/src/index.ts"],
-      "@kube-triage/connectors": ["./packages/connectors/src/index.ts"],
-      "@kube-triage/cli": ["./packages/cli/src/index.ts"],
-      "@kube-triage/mcp-server": ["./packages/mcp-server/src/index.ts"]
+      "@kube-triage/core": [
+        "./packages/core/src/index.ts"
+      ],
+      "@kube-triage/connectors": [
+        "./packages/connectors/src/index.ts"
+      ],
+      "@kube-triage/cli": [
+        "./packages/cli/src/index.ts"
+      ],
+      "@kube-triage/mcp-server": [
+        "./packages/mcp-server/src/index.ts"
+      ],
+      "@kube-triage/api": [
+        "./packages/api/src/index.ts"
+      ]
     }
   },
-  "include": ["packages/*/test", "packages/*/src"]
+  "include": [
+    "packages/*/test",
+    "packages/*/src"
+  ]
 }

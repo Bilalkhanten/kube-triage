@@ -10,6 +10,7 @@ export default defineConfig({
       "@kube-triage/core": src("core"),
       "@kube-triage/connectors": src("connectors"),
       "@kube-triage/cli": src("cli"),
+      "@kube-triage/api": src("api"),
       "@kube-triage/mcp-server": src("mcp-server"),
     },
   },

@@ -1,0 +1,33 @@
+{
+  "name": "@kube-triage/api",
+  "version": "0.0.0",
+  "description": "Incident store, audit log and HTTP API for kube-triage",
+  "type": "module",
+  "license": "MIT",
+  "author": "Bilal Khan",
+  "bin": {
+    "kube-triage-api": "./dist/server.js",
+    "kube-triage-keygen": "./dist/keygen.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "dependencies": {
+    "@kube-triage/connectors": "workspace:*",
+    "@kube-triage/core": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "paths": {
+      "@kube-triage/core": ["./packages/core/src/index.ts"],
+      "@kube-triage/connectors": ["./packages/connectors/src/index.ts"],
+      "@kube-triage/cli": ["./packages/cli/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/test", "packages/*/src"]
+}

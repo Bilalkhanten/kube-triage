@@ -1,0 +1,20 @@
+{
+  "name": "@kube-triage/connectors",
+  "version": "0.0.0",
+  "description": "Read-only Kubernetes and Prometheus connectors",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@kube-triage/core": "workspace:*",
+    "@kubernetes/client-node": "^2.0.2",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,111 @@
+import { describe, expect, it } from "vitest";
+import {
+  EvidenceSchema,
+  buildTimeline,
+  investigate,
+  type Connector,
+  type EvidenceInput,
+  type InvestigationScope,
+} from "../src/index.js";
+
+const scope: InvestigationScope = {
+  namespace: "shop",
+  service: "checkout",
+  from: "2026-01-01T10:00:00Z",
+  to: "2026-01-01T11:00:00Z",
+};
+
+const ev = (over: Partial<EvidenceInput> & { id: string }): EvidenceInput => ({
+  source: "kubernetes",
+  kind: "k8s.test",
+  observedAt: "2026-01-01T10:30:00Z",
+  severity: "warning",
+  summary: "something happened",
+  subject: { kind: "Pod", name: "checkout-1", namespace: "shop" },
+  tags: [],
+  data: {},
+  ...over,
+});
+
+describe("buildTimeline", () => {
+  it("orders by time, then severity", () => {
+    const t = buildTimeline({
+      scope,
+      evidence: [
+        ev({ id: "c", observedAt: "2026-01-01T10:40:00Z" }),
+        ev({ id: "b", observedAt: "2026-01-01T10:10:00Z", severity: "info" }),
+        ev({ id: "a", observedAt: "2026-01-01T10:10:00Z", severity: "critical" }),
+      ],
+    });
+    expect(t.entries.map((e) => e.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("deduplicates by id and keeps the latest observation", () => {
+    const t = buildTimeline({
+      scope,
+      evidence: [
+        ev({ id: "x", observedAt: "2026-01-01T10:10:00Z", summary: "old" }),
+        ev({ id: "x", observedAt: "2026-01-01T10:20:00Z", summary: "new" }),
+      ],
+    });
+    expect(t.entries).toHaveLength(1);
+    expect(t.entries[0]?.summary).toBe("new");
+  });
+
+  it("redacts secrets in summaries and data", () => {
+    const t = buildTimeline({
+      scope,
+      evidence: [ev({ id: "s", summary: "login failed password=hunter2", data: { token: "abc" } })],
+    });
+    expect(JSON.stringify(t)).not.toContain("hunter2");
+    expect(t.entries[0]?.data["token"]).toBe("[REDACTED]");
+  });
+
+  it("rejects malformed evidence", () => {
+    expect(() => buildTimeline({ scope, evidence: [ev({ id: "" })] })).toThrow();
+  });
+
+  it("derives hypotheses that cite their evidence, with higher confidence when sources agree", () => {
+    const t = buildTimeline({
+      scope,
+      evidence: [
+        ev({ id: "k", tags: ["oom-killed"], severity: "critical" }),
+        ev({ id: "p", source: "prometheus", tags: ["memory-pressure"] }),
+        ev({ id: "q", tags: ["image-pull-failure"], severity: "info" }),
+      ],
+    });
+    const oom = t.hypotheses.find((h) => h.id === "oom-killed");
+    expect(oom?.confidence).toBe("high");
+    expect(oom?.evidenceIds.sort()).toEqual(["k", "p"]);
+    const pull = t.hypotheses.find((h) => h.id === "image-pull-failure");
+    expect(pull?.confidence).toBe("low");
+    expect(t.hypotheses[0]?.id).toBe("oom-killed");
+  });
+
+  it("produces no hypotheses from untagged evidence", () => {
+    expect(buildTimeline({ scope, evidence: [ev({ id: "n" })] }).hypotheses).toEqual([]);
+  });
+});
+
+describe("investigate", () => {
+  const good: Connector = { name: "good", collect: async () => [EvidenceSchema.parse(ev({ id: "g" }))] };
+  const bad: Connector = {
+    name: "bad",
+    collect: async () => {
+      throw new Error("connection refused, token=abc123");
+    },
+  };
+
+  it("returns a partial timeline when a connector fails, with the error redacted", async () => {
+    const t = await investigate(scope, [good, bad]);
+    expect(t.entries.map((e) => e.id)).toEqual(["g"]);
+    expect(t.errors).toHaveLength(1);
+    expect(t.errors[0]?.source).toBe("bad");
+    expect(t.errors[0]?.message).not.toContain("abc123");
+  });
+
+  it("validates the scope", async () => {
+    await expect(investigate({ ...scope, namespace: "Bad Namespace!" }, [good])).rejects.toThrow();
+    await expect(investigate({ ...scope, from: scope.to, to: scope.from }, [good])).rejects.toThrow();
+  });
+});

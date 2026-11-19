@@ -1,0 +1,201 @@
+import { redactValue, type CollectOptions, type Connector, type Evidence, type InvestigationScope, type Severity } from "@kube-triage/core";
+import { EventSchema, PodSchema, type KubeEvent, type KubeReader, type Pod } from "./reader.js";
+
+const WAITING_REASONS: Record<string, { tags: string[]; severity: Severity }> = {
+  CrashLoopBackOff: { tags: ["crash-loop"], severity: "critical" },
+  ImagePullBackOff: { tags: ["image-pull-failure"], severity: "critical" },
+  ErrImagePull: { tags: ["image-pull-failure"], severity: "critical" },
+  InvalidImageName: { tags: ["image-pull-failure"], severity: "critical" },
+  CreateContainerConfigError: { tags: ["config-error"], severity: "critical" },
+  CreateContainerError: { tags: ["config-error"], severity: "critical" },
+};
+
+/** Normal events worth showing because they mark rollouts and lifecycle changes. */
+const NOTABLE_NORMAL_REASONS = new Set([
+  "Killing",
+  "ScalingReplicaSet",
+  "SuccessfulCreate",
+  "SuccessfulDelete",
+  "Scheduled",
+]);
+
+const RESTART_THRESHOLD = 3;
+
+export interface KubernetesConnectorOptions {
+  reader: KubeReader;
+}
+
+export class KubernetesConnector implements Connector {
+  readonly name = "kubernetes";
+  private readonly reader: KubeReader;
+
+  constructor(options: KubernetesConnectorOptions) {
+    this.reader = options.reader;
+  }
+
+  async collect(scope: InvestigationScope, options: CollectOptions = {}): Promise<Evidence[]> {
+    const [rawPods, rawEvents] = await Promise.all([
+      this.reader.listPods(scope.namespace, options.signal),
+      this.reader.listEvents(scope.namespace, options.signal),
+    ]);
+    const pods = rawPods.map((p) => PodSchema.parse(p)).filter((p) => matchesService(p.metadata.name, p.metadata.labels, scope.service));
+    const events = rawEvents.map((e) => EventSchema.parse(e));
+
+    // Event messages and pod status text are free-form and can contain secrets.
+    return [
+      ...pods.flatMap((p) => podEvidence(p, scope)),
+      ...events.flatMap((e) => eventEvidence(e, scope)),
+    ].map((e) => redactValue(e));
+  }
+}
+
+function matchesService(name: string, labels: Record<string, string> | undefined, service?: string): boolean {
+  if (!service) return true;
+  return (
+    name === service ||
+    name.startsWith(`${service}-`) ||
+    labels?.["app"] === service ||
+    labels?.["app.kubernetes.io/name"] === service
+  );
+}
+
+function podEvidence(pod: Pod, scope: InvestigationScope): Evidence[] {
+  const out: Evidence[] = [];
+  const name = pod.metadata.name;
+  const subject = { kind: "Pod", name, namespace: scope.namespace };
+  const fallbackTime = pod.status?.startTime ?? new Date(scope.to);
+
+  for (const cs of pod.status?.containerStatuses ?? []) {
+    const waiting = cs.state?.waiting;
+    const waitingRule = waiting?.reason ? WAITING_REASONS[waiting.reason] : undefined;
+    const lastTerminated = cs.lastState?.terminated ?? cs.state?.terminated;
+
+    if (waiting?.reason && waitingRule) {
+      out.push({
+        id: `kubernetes:pod:${name}:${cs.name}:waiting:${waiting.reason}`,
+        source: "kubernetes",
+        kind: "k8s.pod.container-state",
+        observedAt: (lastTerminated?.finishedAt ?? fallbackTime).toISOString(),
+        severity: waitingRule.severity,
+        summary: `Container ${cs.name} in ${name} is ${waiting.reason}${waiting.message ? `: ${waiting.message}` : ""}`,
+        subject,
+        tags: waitingRule.tags,
+        data: { container: cs.name, reason: waiting.reason, restartCount: cs.restartCount },
+      });
+    }
+
+    if (lastTerminated?.reason === "OOMKilled") {
+      out.push({
+        id: `kubernetes:pod:${name}:${cs.name}:terminated:OOMKilled`,
+        source: "kubernetes",
+        kind: "k8s.pod.container-terminated",
+        observedAt: (lastTerminated.finishedAt ?? fallbackTime).toISOString(),
+        severity: "critical",
+        summary: `Container ${cs.name} in ${name} was OOMKilled (exit code ${lastTerminated.exitCode ?? "unknown"})`,
+        subject,
+        tags: ["oom-killed"],
+        data: { container: cs.name, exitCode: lastTerminated.exitCode, restartCount: cs.restartCount },
+      });
+    } else if (lastTerminated && (lastTerminated.exitCode ?? 0) !== 0) {
+      out.push({
+        id: `kubernetes:pod:${name}:${cs.name}:terminated:${lastTerminated.reason ?? "Error"}`,
+        source: "kubernetes",
+        kind: "k8s.pod.container-terminated",
+        observedAt: (lastTerminated.finishedAt ?? fallbackTime).toISOString(),
+        severity: "warning",
+        summary: `Container ${cs.name} in ${name} exited with code ${lastTerminated.exitCode}${lastTerminated.reason ? ` (${lastTerminated.reason})` : ""}`,
+        subject,
+        tags: ["container-error"],
+        data: { container: cs.name, exitCode: lastTerminated.exitCode, reason: lastTerminated.reason },
+      });
+    }
+
+    if (cs.restartCount >= RESTART_THRESHOLD) {
+      out.push({
+        id: `kubernetes:pod:${name}:${cs.name}:restarts`,
+        source: "kubernetes",
+        kind: "k8s.pod.restarts",
+        observedAt: new Date(scope.to).toISOString(),
+        severity: "warning",
+        summary: `Container ${cs.name} in ${name} has restarted ${cs.restartCount} times`,
+        subject,
+        tags: ["restarts"],
+        data: { container: cs.name, restartCount: cs.restartCount },
+      });
+    }
+  }
+
+  for (const cond of pod.status?.conditions ?? []) {
+    if (cond.type === "PodScheduled" && cond.status === "False") {
+      out.push({
+        id: `kubernetes:pod:${name}:unschedulable`,
+        source: "kubernetes",
+        kind: "k8s.pod.condition",
+        observedAt: (cond.lastTransitionTime ?? fallbackTime).toISOString(),
+        severity: "critical",
+        summary: `Pod ${name} cannot be scheduled${cond.message ? `: ${cond.message}` : ""}`,
+        subject,
+        tags: ["unschedulable"],
+        data: { reason: cond.reason },
+      });
+    }
+    if (cond.type === "Ready" && cond.status === "False" && pod.status?.phase === "Running") {
+      out.push({
+        id: `kubernetes:pod:${name}:not-ready`,
+        source: "kubernetes",
+        kind: "k8s.pod.condition",
+        observedAt: (cond.lastTransitionTime ?? fallbackTime).toISOString(),
+        severity: "warning",
+        summary: `Pod ${name} is running but not ready${cond.reason ? ` (${cond.reason})` : ""}`,
+        subject,
+        tags: ["not-ready"],
+        data: { reason: cond.reason, message: cond.message },
+      });
+    }
+  }
+  return out;
+}
+
+function eventTime(e: KubeEvent): Date | undefined {
+  return e.eventTime ?? e.lastTimestamp ?? e.firstTimestamp ?? e.metadata?.creationTimestamp;
+}
+
+function eventTags(e: KubeEvent): string[] {
+  const reason = e.reason ?? "";
+  const message = e.message ?? "";
+  const tags: string[] = [];
+  if (reason === "FailedScheduling") tags.push("unschedulable");
+  if (reason === "BackOff" && /restarting failed container/i.test(message)) tags.push("crash-loop");
+  if (/ErrImagePull|ImagePullBackOff|Failed to pull image/i.test(`${reason} ${message}`)) tags.push("image-pull-failure");
+  if (reason === "Unhealthy") tags.push("probe-failure");
+  if (reason === "OOMKilling" || /out of memory/i.test(message)) tags.push("oom-killed");
+  if (reason === "FailedMount" || reason === "FailedAttachVolume") tags.push("mount-failure");
+  if (reason === "Evicted") tags.push("evicted");
+  return tags;
+}
+
+function eventEvidence(e: KubeEvent, scope: InvestigationScope): Evidence[] {
+  const time = eventTime(e);
+  const objectName = e.involvedObject.name;
+  if (!time || !objectName || !e.reason) return [];
+  if (time.getTime() < Date.parse(scope.from) || time.getTime() > Date.parse(scope.to)) return [];
+  if (scope.service && !matchesService(objectName, undefined, scope.service)) return [];
+
+  const isWarning = e.type === "Warning";
+  if (!isWarning && !NOTABLE_NORMAL_REASONS.has(e.reason)) return [];
+
+  const times = e.count && e.count > 1 ? ` (x${e.count})` : "";
+  return [
+    {
+      id: `kubernetes:event:${e.involvedObject.kind ?? "Object"}:${objectName}:${e.reason}`,
+      source: "kubernetes",
+      kind: "k8s.event",
+      observedAt: time.toISOString(),
+      severity: isWarning ? "warning" : "info",
+      summary: `${e.involvedObject.kind ?? "Object"} ${objectName}: ${e.reason}${e.message ? ` - ${e.message}` : ""}${times}`,
+      subject: { kind: e.involvedObject.kind ?? "Object", name: objectName, namespace: scope.namespace },
+      tags: eventTags(e),
+      data: { reason: e.reason, type: e.type, count: e.count },
+    },
+  ];
+}

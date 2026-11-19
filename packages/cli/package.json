@@ -1,0 +1,23 @@
+{
+  "name": "@kube-triage/cli",
+  "version": "0.0.0",
+  "description": "kube-triage command line interface",
+  "type": "module",
+  "bin": {
+    "kube-triage": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@kube-triage/connectors": "workspace:*",
+    "@kube-triage/core": "workspace:*",
+    "commander": "^15.1.0"
+  }
+}

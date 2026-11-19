@@ -106,3 +106,7 @@ contract.
 3. Loki logs, deploy correlation, Helm chart, runbooks as Markdown, plugin interface.
 4. Optional LLM summary layer, off by default, that only summarises evidence already collected.
 5. Any action (such as restarting a pod) requires explicit approval and is audit-logged.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

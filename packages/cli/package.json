@@ -19,5 +19,6 @@
     "@kube-triage/connectors": "workspace:*",
     "@kube-triage/core": "workspace:*",
     "commander": "^15.1.0"
-  }
+  },
+  "license": "MIT"
 }

@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/.next
+.git
+.github
+coverage
+*.md
+!runbooks/*.md

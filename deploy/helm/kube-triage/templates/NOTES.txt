@@ -1,0 +1,12 @@
+kube-triage is installed. Everything it does is read-only.
+
+API:        {{ include "kube-triage.fullname" . }}-api:{{ .Values.service.apiPort }}
+{{- if .Values.web.enabled }}
+Dashboard:  {{ include "kube-triage.fullname" . }}-web:{{ .Values.service.webPort }}
+
+The dashboard has no login. Put it behind an ingress or proxy that authenticates your users.
+{{- end }}
+
+Try it:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kube-triage.fullname" . }}-api 8080:{{ .Values.service.apiPort }}
+  curl -H "Authorization: Bearer <your key>" localhost:8080/v1/incidents

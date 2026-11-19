@@ -1,0 +1,83 @@
+{{- if .Values.web.enabled }}
+{{- $webSecret := required "web.apiKey.existingSecret is required when web.enabled (a Secret holding a viewer API key)" .Values.web.apiKey.existingSecret }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kube-triage.fullname" . }}-web
+  labels:
+    {{- include "kube-triage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kube-triage.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "kube-triage.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      # The dashboard never talks to the Kubernetes API, so it gets no service account token.
+      automountServiceAccountToken: false
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: web
+          image: "{{ .Values.image.web.repository }}:{{ .Values.image.web.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: PORT
+              value: "3000"
+            - name: KUBE_TRIAGE_API_URL
+              value: "http://{{ include "kube-triage.fullname" . }}-api:{{ .Values.service.apiPort }}"
+            - name: KUBE_TRIAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webSecret }}
+                  key: {{ .Values.web.apiKey.key }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kube-triage.fullname" . }}-web
+  labels:
+    {{- include "kube-triage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.webPort }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: {{ include "kube-triage.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: web
+{{- end }}

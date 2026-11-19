@@ -51,3 +51,71 @@ jobs:
         run: node packages/cli/dist/bin.js investigate --help
       - name: Smoke test the built MCP server (tools/list over stdio)
         run: pnpm --filter @kube-triage/mcp-server smoke
+
+  chart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v3.17.3
+      - name: Lint
+        run: helm lint deploy/helm/kube-triage -f deploy/helm/kube-triage/ci/lint-values.yaml
+      - name: Render with the CI values
+        run: helm template kt deploy/helm/kube-triage -f deploy/helm/kube-triage/ci/lint-values.yaml > /dev/null
+      - name: Namespaced RBAC renders one Role per namespace and no ClusterRole
+        run: |
+          out=$(helm template kt deploy/helm/kube-triage -f deploy/helm/kube-triage/ci/lint-values.yaml --set 'rbac.namespaces={shop,payments}')
+          test "$(echo "$out" | grep -c '^kind: Role$')" = "2"
+          if echo "$out" | grep -q 'kind: ClusterRole'; then echo "unexpected ClusterRole"; exit 1; fi
+      - name: Refuses to render without the required secrets
+        run: |
+          if helm template kt deploy/helm/kube-triage > /dev/null 2>&1; then
+            echo "chart rendered without required secret names"; exit 1
+          fi
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the images
+        run: |
+          docker build -f deploy/docker/api.Dockerfile -t kube-triage-api:ci .
+          docker build -f deploy/docker/web.Dockerfile -t kube-triage-web:ci .
+      # Run them the way the Helm chart does: non-root, read-only filesystem, no capabilities.
+      - name: API starts, migrates and enforces authentication
+        run: |
+          docker run -d --name api --network host --read-only --tmpfs /tmp --user 1000:1000 --cap-drop ALL \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            -e KUBE_TRIAGE_API_KEYS='[{"id":"ci","sha256":"d67095b28dbf46349d0a141802a7f4d85af0cb4ea3fa589f21091f54f84f1ece","role":"viewer"}]' \
+            -e KUBE_TRIAGE_NO_KUBERNETES=1 -e PORT=18080 kube-triage-api:ci
+          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused http://localhost:18080/healthz
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/v1/incidents)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'authorization: Bearer ci-only-key' http://localhost:18080/v1/incidents)" = "200"
+      - name: Dashboard serves with a read-only filesystem
+        run: |
+          docker run -d --name web -p 3000:3000 --read-only --tmpfs /tmp --user 1000:1000 --cap-drop ALL kube-triage-web:ci
+          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused http://localhost:3000/healthz
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          docker logs api || true
+          docker logs web || true

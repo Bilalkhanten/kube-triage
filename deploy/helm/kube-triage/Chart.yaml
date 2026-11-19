@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kube-triage
+description: Read-only incident copilot for Kubernetes and Prometheus (API and dashboard)
+type: application
+version: 0.1.0
+appVersion: "0.0.0"

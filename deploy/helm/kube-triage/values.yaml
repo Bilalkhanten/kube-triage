@@ -1,0 +1,85 @@
+# Nothing in this chart changes your cluster. The API's service account can only get, list and watch.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  # Build the images from deploy/docker and push them to a registry you control.
+  api:
+    repository: kube-triage-api
+    tag: ""
+  web:
+    repository: kube-triage-web
+    tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+api:
+  replicas: 1
+  # Secrets are never put in values. Create them yourself and name them here.
+  database:
+    existingSecret: ""   # required
+    key: DATABASE_URL
+  apiKeys:
+    existingSecret: ""   # required
+    key: KUBE_TRIAGE_API_KEYS
+  # Non-secret connector configuration.
+  connectors:
+    prometheusUrl: ""
+    lokiUrl: ""
+    githubDeploysRepo: ""
+    githubDeploysEnvironment: ""
+  # Secret connector credentials, each read from an existing Secret.
+  # Example: - { name: PROMETHEUS_BEARER_TOKEN, secretName: prom-token, key: token }
+  secretEnv: []
+  # Extra plain environment variables.
+  env: {}
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+web:
+  enabled: true
+  replicas: 1
+  # A key with the viewer role. The dashboard only reads.
+  apiKey:
+    existingSecret: ""   # required when web.enabled
+    key: KUBE_TRIAGE_API_KEY
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+rbac:
+  create: true
+  # Empty: one read-only ClusterRole covers every namespace.
+  # Listed: a read-only Role in each named namespace instead, so the API can only see those.
+  namespaces: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  type: ClusterIP
+  apiPort: 8080
+  webPort: 3000
+
+# The dashboard has no login of its own. Put it behind an ingress or proxy that authenticates
+# your users. This chart deliberately creates no Ingress.
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

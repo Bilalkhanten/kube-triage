@@ -1,0 +1,11 @@
+# Values for `helm lint` and `helm template` in CI. The secret names are placeholders.
+api:
+  database:
+    existingSecret: kube-triage-db
+  apiKeys:
+    existingSecret: kube-triage-keys
+  connectors:
+    prometheusUrl: http://prometheus.monitoring:9090
+web:
+  apiKey:
+    existingSecret: kube-triage-web-key

@@ -66,6 +66,18 @@ describe("kube-triage investigate", () => {
     expect(r.seen()?.prometheusUrl).toBe("http://prom:9090");
   });
 
+  it("reads the Loki URL from the environment and from --loki-url", async () => {
+    let seen: string | undefined;
+    const build = (o: { lokiUrl?: string }) => {
+      seen = o.lokiUrl;
+      return [fake];
+    };
+    await run(["investigate", "-n", "shop"], { env: { LOKI_URL: "http://loki:3100" }, buildConnectors: build }).parse();
+    expect(seen).toBe("http://loki:3100");
+    await run(["investigate", "-n", "shop", "--loki-url", "http://other:3100"], { env: { LOKI_URL: "http://loki:3100" }, buildConnectors: build }).parse();
+    expect(seen).toBe("http://other:3100");
+  });
+
   it("requires a namespace and a valid duration", async () => {
     await expect(run(["investigate"]).parse()).rejects.toThrow(/namespace/);
     await expect(run(["investigate", "-n", "shop", "--since", "soon"]).parse()).rejects.toThrow(/Invalid duration/);

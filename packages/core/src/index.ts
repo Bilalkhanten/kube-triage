@@ -5,3 +5,4 @@ export * from "./hypotheses.js";
 export * from "./timeline.js";
 export * from "./investigate.js";
 export * from "./duration.js";
+export * from "./plugin.js";

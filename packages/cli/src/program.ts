@@ -1,6 +1,6 @@
 import { Command, CommanderError, InvalidArgumentError } from "commander";
-import { investigate, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
-import { KubernetesConnector, PrometheusConnector, createKubeReader } from "@kube-triage/connectors";
+import { PluginRegistry, investigate, loadPluginModule, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
+import { createDefaultRegistry } from "@kube-triage/connectors";
 import { renderTimeline } from "./render.js";
 
 export interface InvestigateOptions {
@@ -8,6 +8,8 @@ export interface InvestigateOptions {
   service?: string;
   since: string;
   prometheusUrl?: string;
+  lokiUrl?: string;
+  plugin?: string[];
   kubeconfig?: string;
   context?: string;
   kubernetes: boolean;
@@ -16,7 +18,7 @@ export interface InvestigateOptions {
 }
 
 export interface ProgramDeps {
-  buildConnectors(options: InvestigateOptions, env: NodeJS.ProcessEnv): Connector[];
+  buildConnectors(options: InvestigateOptions, env: NodeJS.ProcessEnv): Connector[] | Promise<Connector[]>;
   now(): Date;
   write(text: string): void;
   /** Where usage errors go. Defaults to stderr. */
@@ -25,26 +27,26 @@ export interface ProgramDeps {
   isTTY: boolean;
 }
 
-export function defaultBuildConnectors(options: InvestigateOptions, env: NodeJS.ProcessEnv): Connector[] {
-  const connectors: Connector[] = [];
-  if (options.kubernetes) {
-    const reader = createKubeReader({
-      ...(options.kubeconfig ? { kubeconfigPath: options.kubeconfig } : {}),
-      ...(options.context ? { context: options.context } : {}),
-    });
-    connectors.push(new KubernetesConnector({ reader }));
+/**
+ * Flags override the environment. Credentials are only ever read from the environment,
+ * never from argv where they show up in `ps`.
+ */
+export async function defaultBuildConnectors(
+  options: InvestigateOptions,
+  env: NodeJS.ProcessEnv,
+  registry: PluginRegistry = createDefaultRegistry(),
+): Promise<Connector[]> {
+  for (const specifier of options.plugin ?? []) {
+    registry.register(await loadPluginModule(specifier));
   }
-  if (options.prometheusUrl) {
-    // Credentials come from the environment, never from argv where they show up in `ps`.
-    const token = env["PROMETHEUS_BEARER_TOKEN"];
-    connectors.push(
-      new PrometheusConnector({
-        baseUrl: options.prometheusUrl,
-        ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
-      }),
-    );
-  }
-  return connectors;
+  return registry.connectorsFromEnv({
+    ...env,
+    ...(options.prometheusUrl ? { PROMETHEUS_URL: options.prometheusUrl } : {}),
+    ...(options.lokiUrl ? { LOKI_URL: options.lokiUrl } : {}),
+    ...(options.kubeconfig ? { KUBE_TRIAGE_KUBECONFIG: options.kubeconfig } : {}),
+    ...(options.context ? { KUBE_TRIAGE_CONTEXT: options.context } : {}),
+    ...(options.kubernetes === false ? { KUBE_TRIAGE_NO_KUBERNETES: "1" } : {}),
+  });
 }
 
 function duration(value: string): string {
@@ -76,6 +78,12 @@ export function createProgram(deps: ProgramDeps): Command {
     .option("-s, --service <name>", "limit to one service (matches pod name prefix or the app label)")
     .option("--since <duration>", "how far back to look (e.g. 30m, 2h, 1d)", duration, "30m")
     .option("--prometheus-url <url>", "Prometheus base URL (default: $PROMETHEUS_URL)")
+    .option("--loki-url <url>", "Loki base URL (default: $LOKI_URL)")
+    .option(
+      "--plugin <module>",
+      "load a connector plugin module (runs its code with this process's privileges; repeatable)",
+      (value: string, previous: string[] = []) => [...previous, value],
+    )
     .option("--kubeconfig <path>", "path to a kubeconfig file")
     .option("--context <name>", "kubeconfig context to use")
     .option("--no-kubernetes", "skip the Kubernetes connector")
@@ -85,12 +93,13 @@ export function createProgram(deps: ProgramDeps): Command {
       const options: InvestigateOptions = {
         ...raw,
         prometheusUrl: raw.prometheusUrl ?? deps.env["PROMETHEUS_URL"],
+        lokiUrl: raw.lokiUrl ?? deps.env["LOKI_URL"],
         color: (raw.color ?? true) && deps.isTTY && !deps.env["NO_COLOR"],
       };
 
-      const connectors = deps.buildConnectors(options, deps.env);
+      const connectors = await deps.buildConnectors(options, deps.env);
       if (connectors.length === 0) {
-        throw new Error("Nothing to investigate: enable Kubernetes or pass --prometheus-url.");
+        throw new Error("Nothing to investigate: enable Kubernetes or pass --prometheus-url or --loki-url.");
       }
 
       const now = deps.now();

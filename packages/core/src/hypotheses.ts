@@ -75,6 +75,16 @@ const RULES: Rule[] = [
     checks: ["Compare CPU usage with the CPU limit and consider raising the limit."],
   },
   {
+    id: "app-errors",
+    tags: ["log-errors"],
+    title: "Application is logging errors",
+    rationale: "Error-level messages appear in the logs inside the investigated window.",
+    checks: [
+      "Read the first occurrence of each log pattern and compare its time with the first failure above.",
+      "Check whether the errors point at a dependency (database, cache, upstream service).",
+    ],
+  },
+  {
     id: "mount-failure",
     tags: ["mount-failure"],
     title: "Volume cannot be mounted",

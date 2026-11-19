@@ -20,5 +20,6 @@
     "@kube-triage/core": "workspace:*",
     "commander": "^15.1.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Bilal Khan"
 }

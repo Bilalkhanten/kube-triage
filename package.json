@@ -20,5 +20,6 @@
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Bilal Khan"
 }

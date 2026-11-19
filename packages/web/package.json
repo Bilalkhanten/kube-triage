@@ -1,0 +1,29 @@
+{
+  "name": "@kube-triage/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Read-only dashboard for kube-triage incidents",
+  "type": "module",
+  "license": "MIT",
+  "author": "Bilal Khan",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@kube-triage/core": "workspace:*",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^4.3.5"
+  }
+}

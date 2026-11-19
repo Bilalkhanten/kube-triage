@@ -9,11 +9,12 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.test.json && pnpm --filter @kube-triage/web typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "tsc -b --clean",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm build:web",
+    "build:web": "pnpm --filter @kube-triage/web build"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

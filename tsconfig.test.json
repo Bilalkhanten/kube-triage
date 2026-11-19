@@ -26,5 +26,9 @@
   "include": [
     "packages/*/test",
     "packages/*/src"
+  ],
+  "exclude": [
+    "packages/web/src/app",
+    "packages/web/src/components"
   ]
 }

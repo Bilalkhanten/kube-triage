@@ -42,9 +42,11 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Build first: the web package typechecks against the built core package.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
+      - run: pnpm build:web
       - name: Smoke test the built CLI
         run: node packages/cli/dist/bin.js investigate --help
       - name: Smoke test the built MCP server (tools/list over stdio)

@@ -1,7 +1,9 @@
-import type { Severity, Timeline } from "@kube-triage/core";
+import { matchRunbooks, type Runbook, type Severity, type Timeline } from "@kube-triage/core";
 
 export interface RenderOptions {
   color: boolean;
+  /** Runbooks to point at under matching hypotheses. */
+  runbooks?: Runbook[];
 }
 
 const CODES = { red: 31, yellow: 33, green: 32, cyan: 36, dim: 2, bold: 1 } as const;
@@ -21,7 +23,7 @@ function clock(iso: string): string {
 }
 
 /** Plain-text timeline. Hypotheses cite evidence by its [number] in the list above. */
-export function renderTimeline(timeline: Timeline, { color }: RenderOptions): string {
+export function renderTimeline(timeline: Timeline, { color, runbooks = [] }: RenderOptions): string {
   const { scope, entries, hypotheses, errors } = timeline;
   const lines: string[] = [];
   const target = scope.service ? `${scope.namespace}/${scope.service}` : scope.namespace;
@@ -43,6 +45,7 @@ export function renderTimeline(timeline: Timeline, { color }: RenderOptions): st
     );
   });
 
+  const runbooksByHypothesis = matchRunbooks(hypotheses, runbooks);
   if (hypotheses.length > 0) {
     lines.push("", paint(color, "bold", "Likely causes"));
     hypotheses.forEach((h, i) => {
@@ -51,6 +54,7 @@ export function renderTimeline(timeline: Timeline, { color }: RenderOptions): st
       lines.push(`     ${h.rationale}`);
       lines.push(`     evidence: ${cites.map((n) => `[${n}]`).join(" ")}`);
       for (const check of h.suggestedChecks) lines.push(`     - ${check}`);
+      for (const r of runbooksByHypothesis.get(h.id) ?? []) lines.push(`     runbook: ${r.title} (${r.id}.md)`);
     });
   }
 

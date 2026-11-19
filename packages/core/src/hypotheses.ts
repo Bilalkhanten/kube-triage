@@ -100,6 +100,9 @@ const RULES: Rule[] = [
   },
 ];
 
+/** Every hypothesis id this engine can produce. Runbooks are matched against these. */
+export const HYPOTHESIS_IDS: readonly string[] = [...RULES.map((r) => r.id), "recent-change"];
+
 function confidenceFor(evidence: Evidence[]): Confidence {
   const sources = new Set(evidence.map((e) => e.source));
   const hasCritical = evidence.some((e) => e.severity === "critical");

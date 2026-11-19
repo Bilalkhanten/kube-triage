@@ -78,6 +78,27 @@ describe("kube-triage investigate", () => {
     expect(seen).toBe("http://other:3100");
   });
 
+  it("points at matching runbooks, in text and in JSON", async () => {
+    const dir = new URL("../../../runbooks", import.meta.url).pathname;
+    const text = run(["investigate", "-n", "shop", "--runbooks", dir]);
+    await text.parse();
+    expect(text.output()).toContain("runbook: Container is running out of memory (oom-killed.md)");
+
+    const json = run(["investigate", "-n", "shop", "--runbooks", dir, "--json"]);
+    await json.parse();
+    expect(JSON.parse(json.output()).runbooks).toEqual([
+      { hypothesisId: "oom-killed", id: "oom-killed", title: "Container is running out of memory" },
+    ]);
+
+    const none = run(["investigate", "-n", "shop", "--json"]);
+    await none.parse();
+    expect(JSON.parse(none.output()).runbooks).toBeUndefined();
+  });
+
+  it("fails clearly when the runbooks directory does not exist", async () => {
+    await expect(run(["investigate", "-n", "shop", "--runbooks", "/nonexistent-dir"]).parse()).rejects.toThrow(/ENOENT/);
+  });
+
   it("requires a namespace and a valid duration", async () => {
     await expect(run(["investigate"]).parse()).rejects.toThrow(/namespace/);
     await expect(run(["investigate", "-n", "shop", "--since", "soon"]).parse()).rejects.toThrow(/Invalid duration/);

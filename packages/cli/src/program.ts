@@ -1,5 +1,5 @@
 import { Command, CommanderError, InvalidArgumentError } from "commander";
-import { PluginRegistry, investigate, loadPluginModule, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
+import { PluginRegistry, investigate, loadPluginModule, loadRunbooks, matchRunbooks, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
 import { createDefaultRegistry } from "@kube-triage/connectors";
 import { renderTimeline } from "./render.js";
 
@@ -9,6 +9,7 @@ export interface InvestigateOptions {
   since: string;
   prometheusUrl?: string;
   lokiUrl?: string;
+  runbooks?: string;
   plugin?: string[];
   kubeconfig?: string;
   context?: string;
@@ -84,6 +85,7 @@ export function createProgram(deps: ProgramDeps): Command {
       "load a connector plugin module (runs its code with this process's privileges; repeatable)",
       (value: string, previous: string[] = []) => [...previous, value],
     )
+    .option("--runbooks <dir>", "directory of Markdown runbooks to point at (default: $KUBE_TRIAGE_RUNBOOKS)")
     .option("--kubeconfig <path>", "path to a kubeconfig file")
     .option("--context <name>", "kubeconfig context to use")
     .option("--no-kubernetes", "skip the Kubernetes connector")
@@ -94,6 +96,7 @@ export function createProgram(deps: ProgramDeps): Command {
         ...raw,
         prometheusUrl: raw.prometheusUrl ?? deps.env["PROMETHEUS_URL"],
         lokiUrl: raw.lokiUrl ?? deps.env["LOKI_URL"],
+        runbooks: raw.runbooks ?? deps.env["KUBE_TRIAGE_RUNBOOKS"],
         color: (raw.color ?? true) && deps.isTTY && !deps.env["NO_COLOR"],
       };
 
@@ -114,7 +117,16 @@ export function createProgram(deps: ProgramDeps): Command {
         { now },
       );
 
-      deps.write(options.json ? JSON.stringify(timeline, null, 2) + "\n" : renderTimeline(timeline, { color: options.color }));
+      const runbooks = options.runbooks ? await loadRunbooks(options.runbooks) : [];
+      if (options.json) {
+        const matched = [...matchRunbooks(timeline.hypotheses, runbooks)].flatMap(([hypothesisId, list]) =>
+          list.map((r) => ({ hypothesisId, id: r.id, title: r.title })),
+        );
+        const out = options.runbooks ? { ...timeline, runbooks: matched } : timeline;
+        deps.write(JSON.stringify(out, null, 2) + "\n");
+      } else {
+        deps.write(renderTimeline(timeline, { color: options.color, runbooks }));
+      }
     });
 
   return program;

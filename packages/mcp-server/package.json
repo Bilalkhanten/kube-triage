@@ -1,0 +1,27 @@
+{
+  "name": "@kube-triage/mcp-server",
+  "version": "0.0.0",
+  "description": "Read-only MCP server exposing kube-triage investigations",
+  "type": "module",
+  "bin": {
+    "kube-triage-mcp": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@kube-triage/connectors": "workspace:*",
+    "@kube-triage/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  }
+}

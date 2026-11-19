@@ -27,15 +27,15 @@ Likely causes
 
 ## Status
 
-Early. Week 1 of the plan is in place: the core model, the Kubernetes and Prometheus
-connectors, and the CLI.
+Early. In place: the core model, the Kubernetes and Prometheus connectors, the CLI and a
+minimal MCP server.
 
 | Package | What it is | State |
 | --- | --- | --- |
 | `@kube-triage/core` | Evidence, timeline, hypothesis rules, redaction, investigation runner | working |
 | `@kube-triage/connectors` | Kubernetes (pods, events) and Prometheus (range checks, firing alerts) | working |
 | `@kube-triage/cli` | `kube-triage investigate` | working |
-| `mcp-server` | Expose the connectors as MCP tools | planned |
+| `@kube-triage/mcp-server` | MCP server over stdio with one read-only `investigate` tool | working (tested in-memory and via stdio `tools/list` smoke; not run against a live cluster) |
 | `api`, `web` | Incident store, audit log, dashboard | planned |
 | Loki, deploy correlation, Helm chart, runbooks, plugin interface | | planned |
 
@@ -56,6 +56,19 @@ node packages/cli/dist/bin.js investigate -n <namespace> [-s <service>] [--prome
 Options: `--since 30m|2h|1d`, `--kubeconfig`, `--context`, `--no-kubernetes`, `--json`, `--no-color`.
 `PROMETHEUS_URL` can replace `--prometheus-url`. For authenticated Prometheus set
 `PROMETHEUS_BEARER_TOKEN` (it is read from the environment, never from arguments).
+
+## MCP server
+
+```bash
+pnpm build
+PROMETHEUS_URL=http://prometheus:9090 node packages/mcp-server/dist/bin.js
+```
+
+Speaks MCP over stdio and exposes one read-only tool, `investigate(namespace, service?, since?)`
+(`since` defaults to 30m, max 7d), returning the same timeline as `kube-triage investigate --json`.
+Endpoints and credentials come only from the environment (`PROMETHEUS_URL`, `PROMETHEUS_BEARER_TOKEN`,
+`KUBECONFIG`, `KUBE_TRIAGE_CONTEXT`, `KUBE_TRIAGE_NO_KUBERNETES=1`), never from tool arguments.
+Invalid input returns a redacted tool error before any connector runs.
 
 ## Safety model
 
@@ -88,7 +101,7 @@ contract.
 
 ## Roadmap
 
-1. MCP server exposing the connectors as read-only tools, and a kind-based demo with a broken app.
+1. A kind-based demo with a broken app and end-to-end CI; finer-grained MCP tools.
 2. API with Postgres and an audit log, then a web dashboard with the timeline view.
 3. Loki logs, deploy correlation, Helm chart, runbooks as Markdown, plugin interface.
 4. Optional LLM summary layer, off by default, that only summarises evidence already collected.

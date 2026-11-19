@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EvidenceSchema, type Connector } from "@kube-triage/core";
-import { createProgram, parseDuration, renderTimeline, type ProgramDeps } from "../src/index.js";
+import { createProgram, renderTimeline, type ProgramDeps } from "../src/index.js";
 
 const NOW = new Date("2026-01-01T11:00:00Z");
 
@@ -37,17 +37,6 @@ function run(args: string[], overrides: Partial<ProgramDeps> = {}) {
   });
   return { program, output: () => out, seen: () => seen, parse: () => program.parseAsync(["node", "kube-triage", ...args]) };
 }
-
-describe("parseDuration", () => {
-  it.each([
-    ["90s", 90_000],
-    ["30m", 1_800_000],
-    ["2h", 7_200_000],
-    ["1d", 86_400_000],
-  ])("parses %s", (input, ms) => expect(parseDuration(input)).toBe(ms));
-
-  it.each(["", "5", "m", "1w", "-5m", "0m"])("rejects %j", (input) => expect(() => parseDuration(input)).toThrow());
-});
 
 describe("kube-triage investigate", () => {
   it("prints a timeline with likely causes that cite the evidence", async () => {

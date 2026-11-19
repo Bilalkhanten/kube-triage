@@ -10,7 +10,7 @@ test in CI does that.
 
 ## Foundation
 
-- [ ] **1. MCP server: `investigate` tool.** New package `@kube-triage/mcp-server` on the official
+- [x] **1. MCP server: `investigate` tool.** New package `@kube-triage/mcp-server` on the official
   MCP SDK over stdio, one read-only tool `investigate(namespace, service?, since?)` returning the
   same timeline as the CLI. Move `parseDuration` into core so the CLI and server share it.
   *Done when:* tests drive it through an in-memory MCP client with fake connectors (valid result,

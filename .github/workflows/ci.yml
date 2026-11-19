@@ -32,3 +32,5 @@ jobs:
       - run: pnpm build
       - name: Smoke test the built CLI
         run: node packages/cli/dist/bin.js investigate --help
+      - name: Smoke test the built MCP server (tools/list over stdio)
+        run: pnpm --filter @kube-triage/mcp-server smoke

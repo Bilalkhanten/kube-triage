@@ -1,7 +1,6 @@
 import { Command, CommanderError, InvalidArgumentError } from "commander";
-import { investigate, type Connector, type Timeline } from "@kube-triage/core";
+import { investigate, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
 import { KubernetesConnector, PrometheusConnector, createKubeReader } from "@kube-triage/connectors";
-import { parseDuration } from "./duration.js";
 import { renderTimeline } from "./render.js";
 
 export interface InvestigateOptions {

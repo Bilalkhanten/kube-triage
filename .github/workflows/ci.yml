@@ -107,13 +107,13 @@ jobs:
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
             -e KUBE_TRIAGE_API_KEYS='[{"id":"ci","sha256":"d67095b28dbf46349d0a141802a7f4d85af0cb4ea3fa589f21091f54f84f1ece","role":"viewer"}]' \
             -e KUBE_TRIAGE_NO_KUBERNETES=1 -e PORT=18080 kube-triage-api:ci
-          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused http://localhost:18080/healthz
+          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused --retry-all-errors http://localhost:18080/healthz
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/v1/incidents)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'authorization: Bearer ci-only-key' http://localhost:18080/v1/incidents)" = "200"
       - name: Dashboard serves with a read-only filesystem
         run: |
           docker run -d --name web -p 3000:3000 --read-only --tmpfs /tmp --user 1000:1000 --cap-drop ALL kube-triage-web:ci
-          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused http://localhost:3000/healthz
+          curl --fail --silent --retry 15 --retry-delay 2 --retry-connrefused --retry-all-errors http://localhost:3000/healthz
       - name: Container logs on failure
         if: failure()
         run: |

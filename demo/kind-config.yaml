@@ -1,0 +1,6 @@
+# Single-node cluster for the kube-triage demo. Nothing here is exposed outside the host.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: kube-triage-demo
+nodes:
+  - role: control-plane

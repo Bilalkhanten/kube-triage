@@ -26,7 +26,8 @@
   "include": [
     "packages/*/test",
     "packages/*/src",
-    "deploy/test"
+    "deploy/test",
+    "demo/test"
   ],
   "exclude": [
     "packages/web/src/app",

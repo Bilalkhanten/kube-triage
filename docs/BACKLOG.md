@@ -16,11 +16,16 @@ test in CI does that.
   *Done when:* tests drive it through an in-memory MCP client with fake connectors (valid result,
   invalid scope gives a redacted tool error without calling a connector, a failing connector gives a
   partial timeline), and CI smoke-runs the built binary's `tools/list`.
-- [ ] **2. kind demo and end-to-end CI.** `demo/` with a kind cluster config, Prometheus with
-  kube-state-metrics, and a deliberately broken app (OOM, bad image, failing probe), plus a script
-  that brings it up. *Done when:* a CI job creates the cluster, runs `kube-triage investigate`, and
-  asserts the expected evidence and likely cause. This is the first real-cluster verification, and
-  it is the biggest remaining gap: nothing has run against a live Kubernetes, Prometheus or Loki yet.
+- [x] **2. kind demo and end-to-end CI (written).** `demo/` has a kind config, a minimal Prometheus
+  with kube-state-metrics, three deliberately broken apps (OOM, bad image, failing liveness probe),
+  `demo/run.sh` that brings it up and runs the built CLI, `demo/assert-timeline.mjs` that checks the
+  expected causes, static tests for all of it, and a `demo` job in CI. The job has never run: this
+  was written without Docker or kind available, so none of the live behaviour is verified yet.
+- [ ] **2b. Make the `demo` CI job green.** Look at the first run of the `demo` job on a pushed
+  branch and fix what a live cluster reveals (image tags, RBAC for kube-state-metrics, timing, rules
+  that miss real event shapes). Add a scenario test for each diagnosis bug found. *Done when:* the
+  `demo` job passes in CI and README may state that the CLI was verified against a live kind
+  cluster and Prometheus (still not Loki or GitHub).
 - [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the
   expected top likely cause; the suite reports a pass rate. Add a scenario whenever a diagnosis bug is found.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and

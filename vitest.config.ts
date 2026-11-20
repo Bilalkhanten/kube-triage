@@ -14,5 +14,5 @@ export default defineConfig({
       "@kube-triage/mcp-server": src("mcp-server"),
     },
   },
-  test: { include: ["packages/*/test/**/*.test.ts", "deploy/test/**/*.test.ts"] },
+  test: { include: ["packages/*/test/**/*.test.ts", "deploy/test/**/*.test.ts", "demo/test/**/*.test.ts"] },
 });

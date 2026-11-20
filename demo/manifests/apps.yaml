@@ -1,0 +1,76 @@
+# Three deliberately broken workloads, one per failure the investigation should recognise.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+# Allocates far more memory than its limit, so it is OOM-killed and restarts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oom
+  namespace: demo
+  labels: { app: oom }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: oom }
+  template:
+    metadata:
+      labels: { app: oom }
+    spec:
+      containers:
+        - name: hog
+          image: python:3.13-alpine
+          command: ["python", "-c", "import time; x = bytearray(300 * 1024 * 1024); time.sleep(3600)"]
+          resources:
+            requests: { memory: 32Mi, cpu: 10m }
+            limits: { memory: 64Mi }
+---
+# Points at an image that cannot exist (.invalid is reserved and never resolves).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: badimage
+  namespace: demo
+  labels: { app: badimage }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: badimage }
+  template:
+    metadata:
+      labels: { app: badimage }
+    spec:
+      containers:
+        - name: app
+          image: registry.invalid/demo/ghost:1.0
+          resources:
+            requests: { memory: 16Mi, cpu: 10m }
+---
+# Runs fine but its liveness probe always fails, so the kubelet keeps killing it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: badprobe
+  namespace: demo
+  labels: { app: badprobe }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: badprobe }
+  template:
+    metadata:
+      labels: { app: badprobe }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sleep", "3600"]
+          livenessProbe:
+            exec: { command: ["false"] }
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 1
+          resources:
+            requests: { memory: 16Mi, cpu: 10m }

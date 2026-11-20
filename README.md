@@ -43,6 +43,7 @@ Likely causes
 | `@kube-triage/web` | Read-only dashboard: incident list, causes and timeline | working |
 | `runbooks/` | Eleven Markdown runbooks, one or more per likely cause | working |
 | `deploy/` | Dockerfiles and a Helm chart with read-only RBAC | written, see below |
+| `demo/` | kind cluster, Prometheus, kube-state-metrics and three broken apps, plus a CI job that investigates them | written, not yet run (see below) |
 
 ### What has and has not been verified
 
@@ -62,7 +63,9 @@ Likely causes
   template blocks, secure defaults). `helm lint`, `helm template` and the image builds run in CI; they
   have not been run on a developer machine.
 - **Not verified against anything live:** a Kubernetes cluster, Prometheus, Loki or the GitHub API.
-  A kind-based end-to-end test with a deliberately broken demo app is the next milestone.
+  The `demo/` end-to-end job (kind, Prometheus, three broken apps) is written and its manifests,
+  assertions and script are covered by static tests, but the job itself has not run yet. Until it
+  passes in CI, nothing here counts as verified against a live cluster.
 
 ## Quick start (CLI)
 
@@ -241,7 +244,7 @@ pnpm build:web   # next build
 
 ## Roadmap
 
-See [docs/BACKLOG.md](docs/BACKLOG.md). Next: a kind-based demo with a broken app and end-to-end CI
+See [docs/BACKLOG.md](docs/BACKLOG.md). Next: getting the kind demo job green in CI
 (the first run against a real cluster), a dashboard browser test in CI, node, HPA and PVC evidence, an optional
 LLM summary layer that is off by default, and actions that need explicit approval and are audit-logged.
 

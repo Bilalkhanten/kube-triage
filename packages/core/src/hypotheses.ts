@@ -131,8 +131,13 @@ export function deriveHypotheses(entries: Evidence[]): Hypothesis[] {
   }
   const change = recentChangeHypothesis(entries);
   if (change) out.push(change);
-  const rank: Record<Confidence, number> = { high: 0, medium: 1, low: 2 };
-  return out.sort((a, b) => rank[a.confidence] - rank[b.confidence]);
+  // Most confident first. Among equals, a strongly supported change goes first: "this began right
+  // after a deployment" is the most actionable thing to know. A weaker suspicion (for example a
+  // bare rollout, which an autoscaler also causes) keeps its normal place. Array.sort is stable,
+  // so otherwise rule order decides.
+  const rank: Record<Confidence, number> = { high: 0, medium: 2, low: 4 };
+  const key = (h: Hypothesis) => rank[h.confidence] + (h.id === "recent-change" && h.confidence === "high" ? -0.5 : 0);
+  return out.sort((a, b) => key(a) - key(b));
 }
 
 const CHANGE_TAGS = ["deploy", "rollout"];

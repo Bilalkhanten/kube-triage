@@ -154,3 +154,24 @@ describe("recent-change correlation", () => {
     expect(run([change("d", "2026-01-01T10:15:00Z")])).toBeUndefined();
   });
 });
+
+describe("hypothesis ranking", () => {
+  const change = (at: string, over: Partial<EvidenceInput> = {}): EvidenceInput =>
+    ev({ id: "d", observedAt: at, severity: "info", source: "github-deploys", tags: ["deploy"], ...over });
+  const crashes: EvidenceInput[] = [
+    ev({ id: "k", observedAt: "2026-01-01T10:20:00Z", severity: "critical", tags: ["crash-loop"], source: "kubernetes" }),
+    ev({ id: "p", observedAt: "2026-01-01T10:21:00Z", severity: "warning", tags: ["restarts"], source: "prometheus" }),
+  ];
+  const ranked = (evidence: EvidenceInput[]) => buildTimeline({ scope, evidence }).hypotheses.map((h) => `${h.id}:${h.confidence}`);
+
+  it("puts a high-confidence deployment correlation ahead of an equally confident symptom", () => {
+    expect(ranked([change("2026-01-01T10:15:00Z"), ...crashes])).toEqual(["recent-change:high", "crash-loop:high"]);
+  });
+
+  it("does not let a weaker change suspicion jump ahead", () => {
+    const rollout = change("2026-01-01T10:15:00Z", { source: "kubernetes", tags: ["rollout"] });
+    const order = ranked([rollout, ...crashes]);
+    expect(order[0]).toBe("crash-loop:high");
+    expect(order).toContain("recent-change:medium");
+  });
+});

@@ -41,4 +41,9 @@ resources, and never Secrets. A test in the repository fails if a write verb or 
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list", "watch"]
+{{- if .Values.rbac.podLogs }}
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+{{- end }}
 {{- end -}}

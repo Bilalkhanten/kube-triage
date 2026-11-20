@@ -71,6 +71,12 @@ jobs:
           out=$(helm template kt deploy/helm/kube-triage -f deploy/helm/kube-triage/ci/lint-values.yaml --set 'rbac.namespaces={shop,payments}')
           test "$(echo "$out" | grep -c '^kind: Role$')" = "2"
           if echo "$out" | grep -q 'kind: ClusterRole'; then echo "unexpected ClusterRole"; exit 1; fi
+      - name: Pod logs permission appears only when switched on
+        run: |
+          base="helm template kt deploy/helm/kube-triage -f deploy/helm/kube-triage/ci/lint-values.yaml"
+          if $base | grep -q 'pods/log'; then echo "pods/log granted by default"; exit 1; fi
+          $base --set rbac.podLogs=true | grep -q 'pods/log'
+          $base --set rbac.podLogs=true | grep -q 'KUBE_TRIAGE_POD_LOGS'
       - name: Refuses to render without the required secrets
         run: |
           if helm template kt deploy/helm/kube-triage > /dev/null 2>&1; then

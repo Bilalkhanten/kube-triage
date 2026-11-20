@@ -27,6 +27,8 @@ export interface World {
   memory?: Array<[string, Array<[string, number]>]>;
   alerts?: Array<{ name: string; pod: string; at: string; severity?: string }>;
   logs?: Array<[string, string]>;
+  /** Pod logs read through Kubernetes, keyed "pod" or "pod:previous"; each entry is timestamped lines. */
+  podLogs?: Record<string, string[]>;
   deployments?: Array<{ id: number; sha: string; at: string; environment?: string; state?: string }>;
   /** Sources that are down for this scenario. */
   down?: Array<"prometheus" | "loki" | "github" | "kubernetes">;
@@ -102,11 +104,12 @@ export async function investigateWorld(world: World): Promise<Timeline> {
       return world.pods ?? [];
     },
     listEvents: async () => world.events ?? [],
+    readPodLog: async (r) => (world.podLogs?.[r.previous ? `${r.pod}:previous` : r.pod] ?? []).join("\n"),
   };
   return investigate(
     SCOPE,
     [
-      new KubernetesConnector({ reader }),
+      new KubernetesConnector({ reader, podLogs: {} }),
       new PrometheusConnector({ baseUrl: "http://prom", fetch: isDown("prometheus") ? down("prometheus") : promFetch(world) }),
       new LokiConnector({ baseUrl: "http://loki", fetch: isDown("loki") ? down("loki") : lokiFetch(world) }),
       new GitHubDeploysConnector({ repo: "acme/shop", fetch: isDown("github") ? down("github") : githubFetch(world) }),

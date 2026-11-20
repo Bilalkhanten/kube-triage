@@ -12,16 +12,20 @@ function bearer(token: string | undefined): Record<string, string> {
 export const kubernetesPlugin: ConnectorPlugin = {
   name: "kubernetes",
   description: "Pods and events from a Kubernetes cluster (read-only).",
-  env: ["KUBE_TRIAGE_KUBECONFIG", "KUBECONFIG", "KUBE_TRIAGE_CONTEXT", "KUBE_TRIAGE_NO_KUBERNETES"],
+  env: ["KUBE_TRIAGE_KUBECONFIG", "KUBECONFIG", "KUBE_TRIAGE_CONTEXT", "KUBE_TRIAGE_NO_KUBERNETES", "KUBE_TRIAGE_POD_LOGS"],
   fromEnv(env) {
     if (env["KUBE_TRIAGE_NO_KUBERNETES"]) return undefined;
     const kubeconfigPath = env["KUBE_TRIAGE_KUBECONFIG"];
     const context = env["KUBE_TRIAGE_CONTEXT"];
+    // Off unless asked for: reading logs needs the extra pods/log permission and logs can be sensitive.
+    const podLogs = env["KUBE_TRIAGE_POD_LOGS"] === "1";
     return new KubernetesConnector({
       reader: createKubeReader({
         ...(kubeconfigPath ? { kubeconfigPath } : {}),
         ...(context ? { context } : {}),
+        ...(podLogs ? { podLogs: true } : {}),
       }),
+      ...(podLogs ? { podLogs: {} } : {}),
     });
   },
 };

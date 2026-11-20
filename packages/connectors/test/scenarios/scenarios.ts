@@ -82,6 +82,32 @@ export const SCENARIOS: Scenario[] = [
     includes: ["app-errors"],
   },
   {
+    name: "crash loop explained by the previous container's logs, read through Kubernetes",
+    world: {
+      pods: [pod("checkout-abc", { containers: [crashLooping(7, { reason: "Error", exitCode: 1, finishedAt: "2026-01-01T10:25:00Z" })], ready: false })],
+      podLogs: {
+        "checkout-abc:previous": [
+          "2026-01-01T10:24:50.000Z INFO starting checkout",
+          "2026-01-01T10:24:55.000Z ERROR missing required setting PAYMENTS_URL",
+        ],
+      },
+      down: ["loki"],
+    },
+    top: "crash-loop",
+    includes: ["app-errors"],
+    errors: ["loki"],
+  },
+  {
+    name: "out of memory seen only in pod logs still supports the OOM cause",
+    world: {
+      pods: [pod("checkout-abc", { containers: [crashLooping(3, { reason: "Error", exitCode: 1, finishedAt: "2026-01-01T10:25:00Z" })], ready: false })],
+      podLogs: { "checkout-abc:previous": ["2026-01-01T10:24:55.000Z java.lang.OutOfMemoryError: Java heap space"] },
+    },
+    // The out-of-memory message explains the crash loop, so it outranks the symptom.
+    top: "oom-killed",
+    includes: ["crash-loop"],
+  },
+  {
     name: "CPU throttling alone",
     world: { throttling: [["checkout-abc", [["2026-01-01T10:20:00Z", 0.6]]]] },
     top: "cpu-throttling",

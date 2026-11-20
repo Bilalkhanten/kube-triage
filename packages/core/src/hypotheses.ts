@@ -104,7 +104,8 @@ const RULES: Rule[] = [
 export const HYPOTHESIS_IDS: readonly string[] = [...RULES.map((r) => r.id), "recent-change"];
 
 function confidenceFor(evidence: Evidence[]): Confidence {
-  const sources = new Set(evidence.map((e) => e.source));
+  // Loki and kubectl logs read the same log lines, so they are one origin, not two witnesses.
+  const sources = new Set(evidence.map((e) => (e.kind.endsWith(".log-pattern") ? "logs" : e.source)));
   const hasCritical = evidence.some((e) => e.severity === "critical");
   if (sources.size >= 2) return "high";
   if (hasCritical || evidence.length >= 2) return "medium";

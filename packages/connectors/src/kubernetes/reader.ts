@@ -68,7 +68,21 @@ export type KubeEvent = z.infer<typeof EventSchema>;
  * The connector's entire view of the cluster. It only lists; there is deliberately
  * no method that creates, patches or deletes anything.
  */
+export interface PodLogRequest {
+  namespace: string;
+  pod: string;
+  container: string;
+  /** The previous (crashed) instance of the container instead of the current one. */
+  previous: boolean;
+  tailLines: number;
+}
+
 export interface KubeReader {
   listPods(namespace: string, signal?: AbortSignal): Promise<unknown[]>;
   listEvents(namespace: string, signal?: AbortSignal): Promise<unknown[]>;
+  /**
+   * Reads recent log lines, each prefixed with an RFC 3339 timestamp. Optional: it needs the extra
+   * `pods/log` permission, so it is only wired up when pod logs are switched on.
+   */
+  readPodLog?(request: PodLogRequest, signal?: AbortSignal): Promise<string>;
 }

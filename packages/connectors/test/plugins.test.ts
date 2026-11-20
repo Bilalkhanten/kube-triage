@@ -6,6 +6,11 @@ describe("built-in plugins", () => {
     expect(createDefaultRegistry().list().map((p) => p.name)).toEqual(["kubernetes", "prometheus", "loki", "github-deploys"]);
   });
 
+  it("keeps pod log reading off unless KUBE_TRIAGE_POD_LOGS=1", () => {
+    const k8s = createDefaultRegistry().list().find((p) => p.name === "kubernetes")!;
+    expect(k8s.env).toContain("KUBE_TRIAGE_POD_LOGS");
+  });
+
   it("enables Prometheus and Loki only when their URLs are set", () => {
     const registry = createDefaultRegistry();
     const base = { KUBE_TRIAGE_NO_KUBERNETES: "1" };

@@ -51,6 +51,10 @@ web:
 
 rbac:
   create: true
+  # Let the API read pod logs to find the first error lines of unhealthy pods. Off by default:
+  # it adds the pods/log "get" permission, and logs can hold sensitive data (secrets are redacted,
+  # but treat the incident store as sensitive if you turn this on).
+  podLogs: false
   # Empty: one read-only ClusterRole covers every namespace.
   # Listed: a read-only Role in each named namespace instead, so the API can only see those.
   namespaces: []

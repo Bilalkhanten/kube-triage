@@ -21,7 +21,9 @@ function lookup(obj: Record<string, any>, path: string[]): unknown {
 describe("RBAC", () => {
   const helpers = templates.find((t) => t.name === "_helpers.tpl")!.text;
   const block = /{{- define "kube-triage\.readOnlyRules" -}}\n([\s\S]*?)\n{{- end -}}/.exec(helpers);
-  const rules = parse(block?.[1] ?? "") as Array<{ apiGroups: string[]; resources: string[]; verbs: string[] }>;
+  // Drop template directives ({{- if ... }}, {{- end }}) so every optional rule is parsed and checked too.
+  const plain = (block?.[1] ?? "").split("\n").filter((l) => !l.trim().startsWith("{{")).join("\n");
+  const rules = parse(plain) as Array<{ apiGroups: string[]; resources: string[]; verbs: string[] }>;
 
   it("defines a rule list that parses", () => {
     expect(Array.isArray(rules) && rules.length > 0).toBe(true);
@@ -39,7 +41,17 @@ describe("RBAC", () => {
       expect([...rule.apiGroups, ...rule.resources, ...rule.verbs]).not.toContain("*");
       expect(rule.resources).not.toContain("secrets");
       expect(rule.resources).not.toContain("pods/exec");
+      expect(rule.resources).not.toContain("pods/portforward");
+      expect(rule.resources).not.toContain("pods/attach");
     }
+  });
+
+  it("grants pod logs only as a single read, and only when switched on", () => {
+    const logRule = rules.find((r) => r.resources.includes("pods/log"));
+    expect(logRule?.verbs).toEqual(["get"]);
+    expect(values["rbac"].podLogs).toBe(false);
+    expect(helpers).toMatch(/{{- if \.Values\.rbac\.podLogs }}\n- apiGroups: \[""\]\n  resources: \["pods\/log"\]/);
+    expect(templates.find((t) => t.name === "api.yaml")!.text).toContain("KUBE_TRIAGE_POD_LOGS");
   });
 
   it("is the only place permissions are written", () => {

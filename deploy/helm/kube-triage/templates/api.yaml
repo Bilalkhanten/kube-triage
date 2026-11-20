@@ -67,6 +67,10 @@ spec:
             - name: GITHUB_DEPLOYS_ENVIRONMENT
               value: {{ . | quote }}
             {{- end }}
+            {{- if .Values.rbac.podLogs }}
+            - name: KUBE_TRIAGE_POD_LOGS
+              value: "1"
+            {{- end }}
             {{- range .Values.api.secretEnv }}
             - name: {{ .name }}
               valueFrom:

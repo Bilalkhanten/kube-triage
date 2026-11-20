@@ -175,3 +175,20 @@ describe("hypothesis ranking", () => {
     expect(order).toContain("recent-change:medium");
   });
 });
+
+describe("independence of log sources", () => {
+  const logEvidence = (id: string, source: string): EvidenceInput =>
+    ev({ id, source, kind: `${source}.log-pattern`, severity: "warning", tags: ["log-errors"], observedAt: "2026-01-01T10:20:00Z" });
+  const confidence = (evidence: EvidenceInput[]) => buildTimeline({ scope, evidence }).hypotheses.find((h) => h.id === "app-errors")?.confidence;
+
+  it("does not treat Loki and Kubernetes logs of the same pod as two witnesses", () => {
+    // One single warning from one origin stays low even when two tools reported it.
+    expect(confidence([logEvidence("a", "loki")])).toBe("low");
+    expect(confidence([logEvidence("a", "loki"), logEvidence("b", "kubernetes")])).toBe("medium");
+  });
+
+  it("still raises confidence when logs agree with a genuinely different source", () => {
+    const prom = ev({ id: "p", source: "prometheus", severity: "warning", tags: ["log-errors"] });
+    expect(confidence([logEvidence("a", "loki"), prom])).toBe("high");
+  });
+});

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, gt, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
 import type { Db } from "./db.js";
 import { auditLog, type AuditRow } from "./schema.js";
 
@@ -34,6 +34,12 @@ function entryHash(prevHash: string, row: Pick<AuditRow, "at" | "actor" | "role"
   return createHash("sha256")
     .update(stableStringify([prevHash, row.at.toISOString(), row.actor, row.role, row.action, row.target ?? null, row.outcome, row.detail]))
     .digest("hex");
+}
+
+/** The newest entry's position and hash. Store it somewhere the database cannot touch. */
+export interface AuditAnchor {
+  seq: number;
+  hash: string;
 }
 
 export type VerifyResult = { ok: true; count: number } | { ok: false; brokenAtSeq: number; reason: string };
@@ -82,7 +88,21 @@ export class AuditLog {
       .limit(Math.min(options.limit ?? 100, 500));
   }
 
-  async verify(): Promise<VerifyResult> {
+  async head(): Promise<AuditAnchor | null> {
+    const [row] = await this.db.select({ seq: auditLog.seq, hash: auditLog.hash }).from(auditLog).orderBy(desc(auditLog.seq)).limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Checks the whole chain. With an `anchor` taken earlier it also proves that entry still exists
+   * unchanged, which is what exposes rows deleted from the end of the log.
+   */
+  async verify(anchor?: AuditAnchor): Promise<VerifyResult> {
+    if (anchor) {
+      const [row] = await this.db.select({ hash: auditLog.hash }).from(auditLog).where(eq(auditLog.seq, anchor.seq)).limit(1);
+      if (!row) return { ok: false, brokenAtSeq: anchor.seq, reason: "anchored entry is missing (rows may have been removed from the end)" };
+      if (row.hash !== anchor.hash) return { ok: false, brokenAtSeq: anchor.seq, reason: "anchored entry has changed" };
+    }
     let prevHash = "";
     let afterSeq = 0;
     let count = 0;

@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { z } from "zod";
 import { AuditLog } from "./audit.js";
 import { hasRole, type ApiKeyAuthenticator, type Principal, type Role } from "./auth.js";
+import { ConcurrencyGate, FixedWindowLimiter } from "./limits.js";
 import type { Db } from "./db.js";
 import { incidents, type IncidentRow } from "./schema.js";
 
@@ -22,6 +23,16 @@ export interface AppDeps {
   runbooks?: Runbook[];
   now?: () => Date;
   logger?: boolean;
+  limits?: {
+    /** Requests per minute for each authenticated key. */
+    requestsPerMinute?: number;
+    /** Requests per minute for each client address that has not authenticated. */
+    anonymousRequestsPerMinute?: number;
+    /** Investigations that may run at the same time. */
+    maxConcurrentInvestigations?: number;
+  };
+  /** Trust X-Forwarded-For for client addresses. Only enable behind a proxy you control. */
+  trustProxy?: boolean;
 }
 
 const MAX_WINDOW_MS = 7 * 86_400_000;
@@ -48,6 +59,10 @@ const AuditQuery = z.object({
   beforeSeq: z.coerce.number().int().positive().optional(),
 });
 
+const AnchorQuery = z.object({
+  anchorSeq: z.coerce.number().int().positive().optional(),
+  anchorHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+});
 const StatusBody = z.object({ status: z.enum(["open", "resolved"]) });
 const IdParam = z.object({ id: z.uuid() });
 
@@ -95,7 +110,13 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({
     logger: deps.logger ? { redact: ["req.headers.authorization"] } : false,
     bodyLimit: 16 * 1024,
+    trustProxy: deps.trustProxy ?? false,
   });
+  const clock = () => now().getTime();
+  const keyLimiter = new FixedWindowLimiter(deps.limits?.requestsPerMinute ?? 120, 60_000, clock);
+  // Failed attempts are audited, so without a cap they could be used to fill the audit log.
+  const anonymousLimiter = new FixedWindowLimiter(deps.limits?.anonymousRequestsPerMinute ?? 30, 60_000, clock);
+  const investigations = new ConcurrencyGate(deps.limits?.maxConcurrentInvestigations ?? 4);
 
   // Never echo internal error text to clients; log it (redacted) instead.
   app.setErrorHandler((error, request, reply) => {
@@ -121,13 +142,33 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return reply.code(code).send({ error: code === 401 ? "unauthorized" : "forbidden" });
   }
 
+  async function limited(request: FastifyRequest, reply: FastifyReply, retryAfterSeconds: number, first: boolean) {
+    // Only the first rejection in a window is audited, so the log cannot be flooded either.
+    if (first) {
+      await audit.record({
+        actor: request.principal?.id ?? "anonymous",
+        role: request.principal?.role ?? "none",
+        action: "rate.limited",
+        target: request.principal ? undefined : request.ip,
+        outcome: "denied",
+      });
+    }
+    return reply.code(429).header("retry-after", String(retryAfterSeconds)).send({ error: "rate_limited" });
+  }
+
   /** Authenticates, then requires at least `role`. Failures are written to the audit log. */
   const guard =
     (role: Role) =>
     async (request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> => {
       const principal = deps.authenticator.authenticate(request.headers.authorization);
-      if (!principal) return denied(request, reply, 401, "auth.denied");
+      if (!principal) {
+        const hit = anonymousLimiter.hit(request.ip);
+        if (!hit.allowed) return limited(request, reply, hit.retryAfterSeconds, hit.firstRejection);
+        return denied(request, reply, 401, "auth.denied");
+      }
       request.principal = principal;
+      const hit = keyLimiter.hit(principal.id);
+      if (!hit.allowed) return limited(request, reply, hit.retryAfterSeconds, hit.firstRejection);
       if (!hasRole(principal.role, role)) return denied(request, reply, 403, "auth.forbidden");
     };
 
@@ -159,6 +200,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     }
     const connectors = deps.connectors();
     if (connectors.length === 0) return reply.code(503).send({ error: "no_connectors" });
+    if (!investigations.tryEnter()) return reply.code(429).header("retry-after", "5").send({ error: "busy" });
+    try {
+      return await runInvestigation();
+    } finally {
+      investigations.leave();
+    }
+
+    async function runInvestigation() {
 
     const to = now();
     const target = body.service ? `${body.namespace}/${body.service}` : body.namespace;
@@ -191,6 +240,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       detail: { incidentId: incident.id, severity: incident.severity, connectorErrors: timeline.errors.length },
     });
     return reply.code(201).send(detail(incident, deps.runbooks));
+    }
   });
 
   app.patch("/v1/incidents/:id", { preHandler: guard("investigator") }, async (request, reply) => {
@@ -211,9 +261,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return { entries: rows.map((r) => ({ ...r, at: r.at.toISOString() })) };
   });
 
+  /** The newest audit entry. Record it outside the database, then pass it to /verify to detect truncation. */
+  app.get("/v1/audit/head", { preHandler: guard("admin") }, async (request, reply) => {
+    const head = await audit.head();
+    return head ?? reply.code(404).send({ error: "empty" });
+  });
+
   app.get("/v1/audit/verify", { preHandler: guard("admin") }, async (request) => {
     const principal = request.principal as Principal;
-    const result = await audit.verify();
+    const anchor = AnchorQuery.parse(request.query);
+    const result = await audit.verify(anchor.anchorSeq && anchor.anchorHash ? { seq: anchor.anchorSeq, hash: anchor.anchorHash } : undefined);
     await audit.record({ actor: principal.id, role: principal.role, action: "audit.verify", outcome: result.ok ? "success" : "error", detail: { ok: result.ok } });
     return result;
   });

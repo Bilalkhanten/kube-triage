@@ -2,8 +2,10 @@
 import { createDefaultRegistry } from "@kube-triage/connectors";
 import { loadRunbooks } from "@kube-triage/core";
 import { buildApp } from "./app.js";
+import { AuditLog } from "./audit.js";
 import { ApiKeyAuthenticator } from "./auth.js";
 import { createDb, migrate } from "./db.js";
+import { purgeIncidents } from "./retention.js";
 
 async function main(): Promise<void> {
   const env = process.env;
@@ -19,9 +21,36 @@ async function main(): Promise<void> {
   const registry = createDefaultRegistry();
   const runbookDir = env["KUBE_TRIAGE_RUNBOOKS"];
   const runbooks = runbookDir ? await loadRunbooks(runbookDir) : undefined;
-  const app = buildApp({ db: handle.db, authenticator, connectors: () => registry.connectorsFromEnv(env), ...(runbooks ? { runbooks } : {}), logger: true });
+  const app = buildApp({
+    db: handle.db,
+    authenticator,
+    connectors: () => registry.connectorsFromEnv(env),
+    ...(runbooks ? { runbooks } : {}),
+    limits: {
+      requestsPerMinute: positiveInt(env["KUBE_TRIAGE_RATE_LIMIT"], 120),
+      anonymousRequestsPerMinute: positiveInt(env["KUBE_TRIAGE_ANON_RATE_LIMIT"], 30),
+      maxConcurrentInvestigations: positiveInt(env["KUBE_TRIAGE_MAX_CONCURRENT"], 4),
+    },
+    trustProxy: env["KUBE_TRIAGE_TRUST_PROXY"] === "1",
+    logger: true,
+  });
+
+  // Incidents are kept forever unless a retention period is set. The audit log is never purged.
+  const retentionDays = positiveInt(env["KUBE_TRIAGE_RETENTION_DAYS"], 0);
+  let purgeTimer: NodeJS.Timeout | undefined;
+  if (retentionDays > 0) {
+    const audit = new AuditLog(handle.db);
+    const purge = () =>
+      purgeIncidents(handle.db, audit, new Date(Date.now() - retentionDays * 86_400_000)).catch((e: unknown) =>
+        app.log.error({ err: e instanceof Error ? e.message : String(e) }, "retention purge failed"),
+      );
+    void purge();
+    purgeTimer = setInterval(purge, 86_400_000);
+    purgeTimer.unref();
+  }
 
   const shutdown = async () => {
+    if (purgeTimer) clearInterval(purgeTimer);
     await app.close();
     await handle.close();
     process.exit(0);
@@ -31,6 +60,13 @@ async function main(): Promise<void> {
 
   // Loopback by default. The Helm chart opts in to 0.0.0.0 explicitly.
   await app.listen({ host: env["HOST"] ?? "127.0.0.1", port: Number(env["PORT"] ?? 8080) });
+}
+
+function positiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw new Error(`Expected a non-negative integer but got "${value}".`);
+  return n;
 }
 
 main().catch((error: unknown) => {

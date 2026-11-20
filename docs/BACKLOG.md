@@ -21,16 +21,15 @@ test in CI does that.
   that brings it up. *Done when:* a CI job creates the cluster, runs `kube-triage investigate`, and
   asserts the expected evidence and likely cause. This is the first real-cluster verification, and
   it is the biggest remaining gap: nothing has run against a live Kubernetes, Prometheus or Loki yet.
-- [ ] **3. Scenario test suite.** Fixture scenarios (OOM, bad image, unschedulable, failing probe,
-  bad rollout, healthy) each with the expected top likely cause. *Done when:* a test table checks
-  the top hypothesis per scenario and reports a simple pass rate.
+- [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the
+  expected top likely cause; the suite reports a pass rate. Add a scenario whenever a diagnosis bug is found.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and
   the CI PostgreSQL: the list and a detail page render, an unreachable API shows the error page, a
   bad id gives 404, and no horizontal overflow at phone width. *Done when:* the job passes in CI.
 
 ## Evidence quality
 
-- [ ] **5. Pod logs with redaction.** Add recent log tail (including previous container) to the
+- [x] **5. Pod logs with redaction.** (Opt-in, behind `KUBE_TRIAGE_POD_LOGS`.) Add recent log tail (including previous container) to the
   Kubernetes reader, redacted at the boundary, size-capped, as evidence. *Done when:* tests prove
   secrets in logs never reach the timeline and that huge logs are truncated.
 - [ ] **6. Ownership chain.** Resolve Pod to ReplicaSet to Deployment so evidence is grouped by
@@ -38,10 +37,10 @@ test in CI does that.
   a bad-rollout fixture groups the failing pods under the Deployment that rolled out.
 - [ ] **7. Node, HPA and PVC evidence.** Node conditions (memory/disk pressure), HPA at max
   replicas, PVC pending. *Done when:* each has a fixture, a tag and a hypothesis rule with tests.
-- [ ] **8. Finer-grained MCP tools.** Separate tools for pod status, events and a single Prometheus
+- [x] **8. Finer-grained MCP tools.** Separate tools for pod status, events and a single Prometheus
   check, with per-tool permissions in config. *Done when:* a tool disabled in config is not listed
   and cannot be called.
-- [ ] **9. Runbooks in the MCP and API results.** Return matching runbook ids and titles next to
+- [x] **9. Runbooks in the MCP and API results.** Return matching runbook ids and titles next to
   each likely cause, and show them in the dashboard. *Done when:* tests cover all three.
 
 ## Release and operations
@@ -51,7 +50,7 @@ test in CI does that.
 - [ ] **11. Self-observability.** OpenTelemetry traces around each connector call and the
   investigation, off by default. *Done when:* tests assert spans and that no secret appears in
   span attributes.
-- [ ] **12. API hardening.** Per-key rate limit, a cap on concurrent investigations, a retention
+- [x] **12. API hardening.** Per-key rate limit, a cap on concurrent investigations, a retention
   policy for old incidents, and an endpoint that exports the latest audit hash so it can be anchored
   outside the database. *Done when:* each has an integration test against PostgreSQL.
 - [ ] **13. Chart extras.** An optional NetworkPolicy limiting the API's egress to the database and
@@ -81,4 +80,4 @@ test in CI does that.
 - [ ] **14. Optional LLM summary layer, off by default,** that only summarises collected evidence and
   cites evidence ids.
 - [ ] **15. Actions with approval.** Any mutating action requires an explicit approval step and an
-  audit-log entry first. Not to be started before items 8 and 12.
+  audit-log entry first. Not to be started until a human has reviewed the MCP permissions model (item 8, done) and the API hardening (item 12, done).

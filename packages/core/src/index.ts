@@ -7,3 +7,4 @@ export * from "./investigate.js";
 export * from "./duration.js";
 export * from "./plugin.js";
 export * from "./runbooks.js";
+export * from "./report.js";

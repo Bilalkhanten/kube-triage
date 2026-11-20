@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { EvidenceSchema, type Connector } from "@kube-triage/core";
+import { EvidenceSchema, parseRunbook, type Connector } from "@kube-triage/core";
 import { ApiKeyAuthenticator, buildApp, generateKey } from "../src/index.js";
 import { createTestDb, DATABASE_URL, type TestDb } from "./helpers.js";
 
@@ -97,6 +97,27 @@ describe.skipIf(!DATABASE_URL)("HTTP API", () => {
     expect(body.windowFrom).toBe("2026-01-01T10:00:00.000Z");
     expect(body.timeline.hypotheses[0].id).toBe("oom-killed");
     expect(JSON.stringify(body)).not.toContain("hunter2");
+  });
+
+  it("points at runbooks when configured, matched at read time, and at none otherwise", async () => {
+    // Without runbooks configured the field is present and empty.
+    expect((await app.inject({ method: "GET", url: `/v1/incidents/${incidentId}`, headers: as(viewer) })).json().runbooks).toEqual([]);
+
+    const oom = parseRunbook("---\ntitle: Container is running out of memory\nhypotheses: oom-killed\n---\nSteps here", "oom-killed");
+    const withBooks = buildApp({
+      db: t.db,
+      authenticator: new ApiKeyAuthenticator([{ id: "dashboard", sha256: viewer.sha256, role: "viewer" }, { id: "oncall", sha256: investigator.sha256, role: "investigator" }]),
+      connectors: () => [oomConnector],
+      runbooks: [oom],
+      now: () => NOW,
+    });
+    // The incident created earlier gains the pointer, because it is matched when read.
+    const read = await withBooks.inject({ method: "GET", url: `/v1/incidents/${incidentId}`, headers: as(viewer) });
+    expect(read.json().runbooks).toEqual([{ hypothesisId: "oom-killed", id: "oom-killed", title: "Container is running out of memory" }]);
+    expect(read.body).not.toContain("Steps here"); // references only
+    const created = await withBooks.inject({ method: "POST", url: "/v1/investigations", headers: as(investigator), payload: { namespace: "shop" } });
+    expect(created.json().runbooks).toHaveLength(1);
+    await withBooks.close();
   });
 
   it("lists and fetches incidents for a viewer", async () => {

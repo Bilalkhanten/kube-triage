@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createDefaultRegistry } from "@kube-triage/connectors";
+import { loadRunbooks } from "@kube-triage/core";
 import { buildApp } from "./app.js";
 import { ApiKeyAuthenticator } from "./auth.js";
 import { createDb, migrate } from "./db.js";
@@ -16,7 +17,9 @@ async function main(): Promise<void> {
 
   // Connectors come from the environment (and the pod's read-only service account), never from requests.
   const registry = createDefaultRegistry();
-  const app = buildApp({ db: handle.db, authenticator, connectors: () => registry.connectorsFromEnv(env), logger: true });
+  const runbookDir = env["KUBE_TRIAGE_RUNBOOKS"];
+  const runbooks = runbookDir ? await loadRunbooks(runbookDir) : undefined;
+  const app = buildApp({ db: handle.db, authenticator, connectors: () => registry.connectorsFromEnv(env), ...(runbooks ? { runbooks } : {}), logger: true });
 
   const shutdown = async () => {
     await app.close();

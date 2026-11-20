@@ -12,7 +12,7 @@ export default async function IncidentPage({ params }: { params: Promise<{ id: s
   if (!incident) notFound();
 
   const rows = timelineRows(incident.timeline);
-  const causes = hypothesisCards(incident.timeline);
+  const causes = hypothesisCards(incident.timeline, incident.runbooks);
   const target = incident.service ? `${incident.namespace}/${incident.service}` : incident.namespace;
 
   return (
@@ -64,6 +64,16 @@ export default async function IncidentPage({ params }: { params: Promise<{ id: s
                     <li key={check}>{check}</li>
                   ))}
                 </ul>
+                {c.runbooks.length > 0 && (
+                  <p className="mt-2 text-sm">
+                    <span className="text-slate-600 dark:text-slate-400">Runbook: </span>
+                    {c.runbooks.map((r) => (
+                      <span key={r.id} className="mr-3">
+                        {r.title} <span className="font-mono text-xs text-slate-500">({r.id}.md)</span>
+                      </span>
+                    ))}
+                  </p>
+                )}
               </li>
             ))}
           </ol>

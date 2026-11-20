@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { investigate, parseDuration, redactSecrets, type Connector } from "@kube-triage/core";
+import { investigate, parseDuration, redactSecrets, runbookRefs, type Connector, type Runbook } from "@kube-triage/core";
 
 /** Longest look-back window one tool call may request. Keeps Prometheus range queries bounded. */
 export const MAX_SINCE_MS = 7 * 86_400_000;
@@ -8,6 +8,8 @@ export const DEFAULT_SINCE = "30m";
 
 export interface ServerDeps {
   connectors: Connector[];
+  /** When given, the result also lists the runbooks that match each likely cause. */
+  runbooks?: Runbook[];
   now(): Date;
   name?: string;
   version?: string;
@@ -58,7 +60,8 @@ export function createServer(deps: ServerDeps): McpServer {
           deps.connectors,
           { now, signal: extra.signal },
         );
-        return { content: [{ type: "text" as const, text: JSON.stringify(timeline, null, 2) }] };
+        const result = deps.runbooks ? { ...timeline, runbooks: runbookRefs(timeline.hypotheses, deps.runbooks) } : timeline;
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return toolError(error);
       }

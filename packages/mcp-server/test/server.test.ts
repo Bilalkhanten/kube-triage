@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { EvidenceSchema, TimelineSchema, type Connector, type InvestigationScope } from "@kube-triage/core";
+import { EvidenceSchema, TimelineSchema, parseRunbook, type Connector, type InvestigationScope, type Runbook } from "@kube-triage/core";
 import { createServer } from "../src/index.js";
 
 const NOW = new Date("2026-01-01T11:00:00Z");
@@ -31,8 +31,8 @@ function spy(name: string, collect: (scope: InvestigationScope) => Promise<Retur
   return { connector, scopes };
 }
 
-async function connect(connectors: Connector[]) {
-  const server = createServer({ connectors, now: () => NOW });
+async function connect(connectors: Connector[], runbooks?: Runbook[]) {
+  const server = createServer({ connectors, ...(runbooks ? { runbooks } : {}), now: () => NOW });
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0.0.0" });
   await Promise.all([server.connect(serverT), client.connect(clientT)]);
@@ -67,6 +67,20 @@ describe("kube-triage MCP server", () => {
       from: "2026-01-01T10:00:00.000Z",
       to: "2026-01-01T11:00:00.000Z",
     });
+  });
+
+  it("lists matching runbooks next to the likely causes only when runbooks are configured", async () => {
+    const oom = parseRunbook("---\ntitle: Container is running out of memory\nhypotheses: oom-killed\n---\nSteps", "oom-killed");
+    const k = spy("kubernetes", async () => [evidence()]);
+
+    const withBooks = await connect([k.connector], [oom]);
+    const a = JSON.parse(text(await withBooks.callTool({ name: "investigate", arguments: { namespace: "shop" } })));
+    expect(a.runbooks).toEqual([{ hypothesisId: "oom-killed", id: "oom-killed", title: "Container is running out of memory" }]);
+    expect(JSON.stringify(a)).not.toContain("Steps"); // references only, never bodies
+
+    const without = await connect([k.connector]);
+    const b = JSON.parse(text(await without.callTool({ name: "investigate", arguments: { namespace: "shop" } })));
+    expect(b.runbooks).toBeUndefined();
   });
 
   it("defaults the window to 30 minutes", async () => {

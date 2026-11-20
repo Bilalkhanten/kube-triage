@@ -40,6 +40,17 @@ describe("view model", () => {
     expect(cards.map((c) => c.number)).toEqual(cards.map((_, i) => i + 1));
   });
 
+  it("attaches each runbook to the cause it belongs to", () => {
+    const refs = [
+      { hypothesisId: "oom-killed", id: "oom-killed", title: "Container is running out of memory" },
+      { hypothesisId: "nothing-here", id: "other", title: "Unrelated" },
+    ];
+    const cards = hypothesisCards(timeline, refs);
+    expect(cards.find((c) => c.id === "oom-killed")?.runbooks).toEqual([{ id: "oom-killed", title: "Container is running out of memory" }]);
+    expect(cards.find((c) => c.id === "probe-failure")?.runbooks).toEqual([]);
+    expect(hypothesisCards(timeline).every((c) => c.runbooks.length === 0)).toBe(true);
+  });
+
   it("ignores citations of evidence that is not in the timeline", () => {
     const broken = { ...timeline, hypotheses: [{ ...timeline.hypotheses[0]!, evidenceIds: ["missing", "oom"] }] };
     expect(hypothesisCards(broken)[0]?.cites).toEqual([1]);

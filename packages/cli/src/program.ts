@@ -1,5 +1,5 @@
 import { Command, CommanderError, InvalidArgumentError } from "commander";
-import { PluginRegistry, investigate, loadPluginModule, loadRunbooks, matchRunbooks, parseDuration, type Connector, type Timeline } from "@kube-triage/core";
+import { PluginRegistry, investigate, loadPluginModule, loadRunbooks, parseDuration, runbookRefs, type Connector, type Timeline } from "@kube-triage/core";
 import { createDefaultRegistry } from "@kube-triage/connectors";
 import { renderTimeline } from "./render.js";
 
@@ -119,9 +119,7 @@ export function createProgram(deps: ProgramDeps): Command {
 
       const runbooks = options.runbooks ? await loadRunbooks(options.runbooks) : [];
       if (options.json) {
-        const matched = [...matchRunbooks(timeline.hypotheses, runbooks)].flatMap(([hypothesisId, list]) =>
-          list.map((r) => ({ hypothesisId, id: r.id, title: r.title })),
-        );
+        const matched = runbookRefs(timeline.hypotheses, runbooks);
         const out = options.runbooks ? { ...timeline, runbooks: matched } : timeline;
         deps.write(JSON.stringify(out, null, 2) + "\n");
       } else {

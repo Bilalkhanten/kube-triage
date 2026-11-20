@@ -1,4 +1,4 @@
-import { TimelineSchema } from "@kube-triage/core";
+import { RunbookRefSchema, TimelineSchema } from "@kube-triage/core";
 import { z } from "zod";
 
 /**
@@ -19,6 +19,8 @@ const Detail = Summary.extend({
   windowFrom: z.iso.datetime({ offset: true }),
   windowTo: z.iso.datetime({ offset: true }),
   timeline: TimelineSchema,
+  /** Older API versions do not send this. */
+  runbooks: z.array(RunbookRefSchema).default([]),
 });
 
 export type IncidentSummary = z.infer<typeof Summary>;

@@ -1,4 +1,4 @@
-import { investigate, parseDuration, redactSecrets, type Connector, type Severity, type Timeline } from "@kube-triage/core";
+import { investigate, parseDuration, redactSecrets, runbookRefs, type Connector, type Runbook, type Severity, type Timeline } from "@kube-triage/core";
 import { and, desc, eq, lt } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -18,6 +18,8 @@ export interface AppDeps {
   authenticator: ApiKeyAuthenticator;
   /** Called per investigation, so connectors can be rebuilt from fresh configuration. */
   connectors: () => Connector[];
+  /** Runbooks to point at. Matched when an incident is read, so updated runbooks apply to old incidents too. */
+  runbooks?: Runbook[];
   now?: () => Date;
   logger?: boolean;
 }
@@ -77,8 +79,14 @@ function summary(row: IncidentRow) {
   };
 }
 
-function detail(row: IncidentRow) {
-  return { ...summary(row), windowFrom: row.windowFrom.toISOString(), windowTo: row.windowTo.toISOString(), timeline: row.timeline };
+function detail(row: IncidentRow, runbooks: Runbook[] = []) {
+  return {
+    ...summary(row),
+    windowFrom: row.windowFrom.toISOString(),
+    windowTo: row.windowTo.toISOString(),
+    timeline: row.timeline,
+    runbooks: runbookRefs(row.timeline.hypotheses, runbooks),
+  };
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -134,7 +142,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const { id } = IdParam.parse(request.params);
     const [row] = await deps.db.select().from(incidents).where(eq(incidents.id, id)).limit(1);
     if (!row) return reply.code(404).send({ error: "not_found" });
-    return detail(row);
+    return detail(row, deps.runbooks);
   });
 
   app.post("/v1/investigations", { preHandler: guard("investigator") }, async (request, reply) => {
@@ -182,7 +190,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       outcome: "success",
       detail: { incidentId: incident.id, severity: incident.severity, connectorErrors: timeline.errors.length },
     });
-    return reply.code(201).send(detail(incident));
+    return reply.code(201).send(detail(incident, deps.runbooks));
   });
 
   app.patch("/v1/incidents/:id", { preHandler: guard("investigator") }, async (request, reply) => {
@@ -192,7 +200,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const [row] = await deps.db.update(incidents).set({ status }).where(eq(incidents.id, id)).returning();
     if (!row) return reply.code(404).send({ error: "not_found" });
     await audit.record({ actor: principal.id, role: principal.role, action: "incident.update", target: id, outcome: "success", detail: { status } });
-    return detail(row);
+    return detail(row, deps.runbooks);
   });
 
   app.get("/v1/audit", { preHandler: guard("admin") }, async (request) => {

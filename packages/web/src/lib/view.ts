@@ -1,4 +1,4 @@
-import type { Confidence, Severity, Timeline } from "@kube-triage/core";
+import type { Confidence, RunbookRef, Severity, Timeline } from "@kube-triage/core";
 
 export type Tone = Severity | "none";
 
@@ -23,6 +23,8 @@ export interface HypothesisCard {
   /** Numbers of the timeline rows this rests on. */
   cites: number[];
   checks: string[];
+  /** Runbooks that apply to this cause, by title. The Markdown stays in the repository. */
+  runbooks: Array<{ id: string; title: string }>;
 }
 
 /** "10:20:00", always UTC so a shared screen reads the same for everyone. */
@@ -51,7 +53,7 @@ export function timelineRows(timeline: Timeline): TimelineRow[] {
   }));
 }
 
-export function hypothesisCards(timeline: Timeline): HypothesisCard[] {
+export function hypothesisCards(timeline: Timeline, runbooks: RunbookRef[] = []): HypothesisCard[] {
   const numberById = new Map(timeline.entries.map((e, i) => [e.id, i + 1]));
   return timeline.hypotheses.map((h, i) => ({
     number: i + 1,
@@ -61,6 +63,7 @@ export function hypothesisCards(timeline: Timeline): HypothesisCard[] {
     rationale: h.rationale,
     cites: h.evidenceIds.map((id) => numberById.get(id)).filter((n): n is number => n !== undefined),
     checks: h.suggestedChecks,
+    runbooks: runbooks.filter((r) => r.hypothesisId === h.id).map((r) => ({ id: r.id, title: r.title })),
   }));
 }
 

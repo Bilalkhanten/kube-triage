@@ -137,6 +137,28 @@ describe("KubernetesConnector", () => {
     expect(evidence[0]?.observedAt).toBe("2026-01-01T10:20:00.000Z");
   });
 
+  it("accepts the nulls a real API server sends for unset fields", async () => {
+    const realPods = [
+      {
+        metadata: { name: "checkout-n", namespace: "shop", labels: { app: "checkout" } },
+        status: {
+          phase: "Running",
+          startTime: null,
+          conditions: [{ type: "Ready", status: "False", reason: null, message: null, lastTransitionTime: null }],
+          containerStatuses: [
+            { name: "app", restartCount: 3, state: { waiting: { reason: "CrashLoopBackOff", message: null }, terminated: null }, lastState: { terminated: { reason: "OOMKilled", exitCode: 137, message: null, finishedAt: "2026-01-01T10:20:00Z" } } },
+          ],
+        },
+      },
+    ];
+    const realEvents = [
+      { type: "Warning", reason: "FailedMount", message: "MountVolume.SetUp failed", count: null, eventTime: null, firstTimestamp: "2026-01-01T10:32:00Z", lastTimestamp: "2026-01-01T10:32:30Z", metadata: { name: "e1", creationTimestamp: "2026-01-01T10:32:00Z" }, involvedObject: { kind: "Pod", name: "checkout-n", namespace: null } },
+    ];
+    const evidence = await new KubernetesConnector({ reader: reader({ listPods: async () => realPods, listEvents: async () => realEvents }) }).collect(scope);
+    expect(evidence.some((e) => e.kind === "k8s.event" && e.summary.includes("FailedMount"))).toBe(true);
+    expect(evidence.some((e) => e.tags?.includes("oom-killed"))).toBe(true);
+  });
+
   it("fails loudly on a malformed API response instead of guessing", async () => {
     const bad = reader({ listPods: async () => [{ nope: true }] });
     await expect(new KubernetesConnector({ reader: bad }).collect(scope)).rejects.toThrow();

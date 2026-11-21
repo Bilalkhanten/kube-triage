@@ -23,7 +23,10 @@ test in CI does that.
   was written without Docker or kind available, so none of the live behaviour is verified yet.
 - [ ] **2b. Make the `demo` CI job green.** Look at the first run of the `demo` job on a pushed
   branch and fix what a live cluster reveals (image tags, RBAC for kube-state-metrics, timing, rules
-  that miss real event shapes). Add a scenario test for each diagnosis bug found. *Done when:* the
+  that miss real event shapes). Add a scenario test for each diagnosis bug found.   First live run found one bug, now fixed: the API server sends unset fields as `null` (for example
+  `eventTime`), which the Kubernetes schema rejected, so all Kubernetes evidence was lost. The next
+  run's log is the starting point.
+  *Done when:* the
   `demo` job passes in CI and README may state that the CLI was verified against a live kind
   cluster and Prometheus (still not Loki or GitHub).
 - [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the

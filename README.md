@@ -43,7 +43,7 @@ Likely causes
 | `@kube-triage/web` | Read-only dashboard: incident list, causes and timeline | working |
 | `runbooks/` | Eleven Markdown runbooks, one or more per likely cause | working |
 | `deploy/` | Dockerfiles and a Helm chart with read-only RBAC | written, see below |
-| `demo/` | kind cluster, Prometheus, kube-state-metrics and three broken apps, plus a CI job that investigates them | written, not yet run (see below) |
+| `demo/` | kind cluster, Prometheus, kube-state-metrics and three broken apps, plus a CI job that investigates them | working in CI (see below) |
 
 ### What has and has not been verified
 
@@ -62,10 +62,15 @@ Likely causes
 - **The Helm chart** is covered by static tests (read-only RBAC, every referenced value exists, balanced
   template blocks, secure defaults). `helm lint`, `helm template` and the image builds run in CI; they
   have not been run on a developer machine.
-- **Not verified against anything live:** a Kubernetes cluster, Prometheus, Loki or the GitHub API.
-  The `demo/` end-to-end job (kind, Prometheus, three broken apps) is written and its manifests,
-  assertions and script are covered by static tests, but the job itself has not run yet. Until it
-  passes in CI, nothing here counts as verified against a live cluster.
+- **Verified against a live kind cluster and Prometheus, in CI:** the `demo` job creates a kind
+  cluster with Prometheus, kube-state-metrics and three deliberately broken apps, runs the built CLI,
+  and asserts that the OOM, bad-image and failing-probe causes are found, each citing evidence about
+  its own app, with evidence from both the Kubernetes and Prometheus connectors. It passed on CI run
+  #19 (commit bf83996) after one bug a live API server exposed was fixed (unset fields sent as
+  `null`). That is one passing run on a small cluster; it has not been repeated enough to say how
+  stable it is.
+- **Not verified against anything live:** Loki, the GitHub API, pod log reading
+  (`KUBE_TRIAGE_POD_LOGS`) and namespaced RBAC on a real cluster.
 
 ## Quick start (CLI)
 
@@ -244,8 +249,7 @@ pnpm build:web   # next build
 
 ## Roadmap
 
-See [docs/BACKLOG.md](docs/BACKLOG.md). Next: getting the kind demo job green in CI
-(the first run against a real cluster), a dashboard browser test in CI, node, HPA and PVC evidence, an optional
+See [docs/BACKLOG.md](docs/BACKLOG.md). Next: a dashboard browser test in CI, node, HPA and PVC evidence, an optional
 LLM summary layer that is off by default, and actions that need explicit approval and are audit-logged.
 
 ## License

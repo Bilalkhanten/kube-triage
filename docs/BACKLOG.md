@@ -21,14 +21,14 @@ test in CI does that.
   `demo/run.sh` that brings it up and runs the built CLI, `demo/assert-timeline.mjs` that checks the
   expected causes, static tests for all of it, and a `demo` job in CI. The job has never run: this
   was written without Docker or kind available, so none of the live behaviour is verified yet.
-- [ ] **2b. Make the `demo` CI job green.** Look at the first run of the `demo` job on a pushed
-  branch and fix what a live cluster reveals (image tags, RBAC for kube-state-metrics, timing, rules
-  that miss real event shapes). Add a scenario test for each diagnosis bug found.   First live run found one bug, now fixed: the API server sends unset fields as `null` (for example
-  `eventTime`), which the Kubernetes schema rejected, so all Kubernetes evidence was lost. The next
-  run's log is the starting point.
-  *Done when:* the
-  `demo` job passes in CI and README may state that the CLI was verified against a live kind
-  cluster and Prometheus (still not Loki or GitHub).
+- [x] **2b. Make the `demo` CI job green.** The first live run found one bug (the API server sends
+  unset fields as `null`, for example `eventTime`, which the Kubernetes schema rejected, so all
+  Kubernetes evidence was lost); it is fixed with a test. The next run (CI #19, bf83996) passed:
+  "Demo assertions passed (3 expected causes found)". README states the CLI was verified against a
+  live kind cluster and Prometheus (not Loki, GitHub or pod logs).
+- [ ] **2c. Demo stability and coverage.** Re-run the `demo` job several times to see whether it is
+  flaky, and extend it to one more live shape (pod logs with `KUBE_TRIAGE_POD_LOGS=1`).
+  *Done when:* at least five consecutive CI runs pass and a log-based cause is asserted live.
 - [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the
   expected top likely cause; the suite reports a pass rate. Add a scenario whenever a diagnosis bug is found.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and

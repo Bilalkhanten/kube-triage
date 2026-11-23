@@ -242,7 +242,7 @@ only load code you trust. Run any new connector through the shared contract in
 docker compose up -d db
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
 pnpm build       # tsc -b
-pnpm typecheck   # sources and tests, plus the dashboard
+pnpm typecheck   # builds the libraries, then checks sources, tests and the dashboard (works on a fresh clone)
 pnpm test        # vitest, runs against source; API tests need DATABASE_URL and skip without it
 pnpm build:web   # next build
 ```

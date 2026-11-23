@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -p tsconfig.test.json && pnpm --filter @kube-triage/web typecheck",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json && pnpm --filter @kube-triage/web typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "tsc -b --clean",

@@ -26,9 +26,16 @@ test in CI does that.
   Kubernetes evidence was lost); it is fixed with a test. The next run (CI #19, bf83996) passed:
   "Demo assertions passed (3 expected causes found)". README states the CLI was verified against a
   live kind cluster and Prometheus (not Loki, GitHub or pod logs).
-- [ ] **2c. Demo stability and coverage.** Re-run the `demo` job several times to see whether it is
-  flaky, and extend it to one more live shape (pod logs with `KUBE_TRIAGE_POD_LOGS=1`).
-  *Done when:* at least five consecutive CI runs pass and a log-based cause is asserted live.
+- [x] **2c. Live pod log coverage in the demo (written).** The demo has a fourth app (`crashlog`) that
+  logs an error containing a fake credential and exits, `demo/run.sh` runs the CLI with
+  `KUBE_TRIAGE_POD_LOGS=1`, and the assertions require pod log evidence about that app and that the
+  fake secret never reaches the timeline. Static tests cover the assertions and manifests. The new
+  parts have not run on a cluster yet: this run had no Docker or kind.
+- [ ] **2d. Confirm the live pod log assertion and measure demo stability.** Watch the `demo` job on
+  the push that added 2c and fix whatever a real cluster shows (for example log timing or a
+  mismatch with `previous` log reads), then re-run the job.
+  *Done when:* the log-based cause is asserted in a passing CI run and at least five consecutive
+  `demo` runs pass; README's "Not verified" list drops pod logs.
 - [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the
   expected top likely cause; the suite reports a pass rate. Add a scenario whenever a diagnosis bug is found.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and

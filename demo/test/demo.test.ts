@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseAllDocuments } from "yaml";
-import { EXPECTED, checkTimeline } from "../assert-timeline.mjs";
+import { EXPECTED, LOG_EXPECTED, checkTimeline } from "../assert-timeline.mjs";
 
 /**
  * Static checks on the demo. They run without a cluster. The real verification is the `demo` job
@@ -14,9 +14,10 @@ const root = join(dir, "..");
 const docs = (file: string) =>
   parseAllDocuments(readFileSync(join(dir, "manifests", file), "utf8")).map((d) => d.toJS() as Record<string, any>);
 
-function timelineFor(causes: string[], sources = ["kubernetes", "prometheus"]) {
+function timelineFor(causes: string[], sources = ["kubernetes", "prometheus"], withLog = true) {
   const entries = [
     ...EXPECTED.map(({ app }, i) => ({ id: `e${i}`, source: sources[0], subject: { kind: "Pod", name: `${app}-abc-xyz` } })),
+    ...(withLog ? [{ id: "l0", source: "kubernetes", kind: "k8s.pod.log-pattern", summary: `Log errors in ${LOG_EXPECTED.app}-abc-xyz: ERROR ${LOG_EXPECTED.message} token=[REDACTED]`, subject: { kind: "Pod", name: `${LOG_EXPECTED.app}-abc-xyz` } }] : []),
     ...sources.slice(1).map((source, i) => ({ id: `p${i}`, source, subject: { kind: "Pod", name: "oom-abc-xyz" } })),
   ];
   const hypotheses = EXPECTED.filter((x) => causes.includes(x.cause)).map(({ cause }) => ({ id: cause, evidenceIds: [`e${EXPECTED.findIndex((x) => x.cause === cause)}`] }));
@@ -53,6 +54,14 @@ describe("demo assertions", () => {
     expect(out).toContain("not in the timeline");
   });
 
+  it("requires the pod log evidence, and that secrets in logs are redacted", () => {
+    expect(checkTimeline(timelineFor(all, ["kubernetes", "prometheus"], false)).join("\n")).toContain("no pod log evidence about crashlog");
+    const t = timelineFor(all);
+    const log = t.entries.find((e) => e.id === "l0") as { summary: string };
+    log.summary = `ERROR ${LOG_EXPECTED.message} token=${LOG_EXPECTED.secret}-123`;
+    expect(checkTimeline(t).join("\n")).toContain("unredacted");
+  });
+
   it("does not throw on garbage input", () => {
     expect(checkTimeline(null).length).toBeGreaterThan(0);
   });
@@ -62,9 +71,9 @@ describe("demo manifests", () => {
   const all = [...docs("apps.yaml"), ...docs("monitoring.yaml")].filter(Boolean);
   const images = all.flatMap((d) => (d["spec"]?.template?.spec?.containers ?? []).map((c: any) => c.image as string));
 
-  it("defines one Deployment per expected broken app, in the demo namespace", () => {
+  it("defines one Deployment per expected broken app plus the log app, in the demo namespace", () => {
     const names = docs("apps.yaml").filter((d) => d["kind"] === "Deployment").map((d) => `${d["metadata"].namespace}/${d["metadata"].name}`);
-    expect(names.sort()).toEqual(EXPECTED.map((x) => `demo/${x.app}`).sort());
+    expect(names.sort()).toEqual([...EXPECTED.map((x) => x.app), LOG_EXPECTED.app].map((a) => `demo/${a}`).sort());
   });
 
   it("pins every image to an explicit non-latest tag", () => {
@@ -87,6 +96,14 @@ describe("demo manifests", () => {
     expect(script).not.toMatch(/kubectl (?!--context)/);
     expect(script).toContain("http://127.0.0.1:19090");
     expect(readFileSync(join(dir, "kind-config.yaml"), "utf8")).toContain("kube-triage-demo");
+  });
+
+  it("the log app emits the asserted message and a fake secret, and the run script turns pod logs on", () => {
+    const app = docs("apps.yaml").find((d) => d["metadata"]?.name === LOG_EXPECTED.app)!;
+    const command = app["spec"].template.spec.containers[0].command.join(" ");
+    expect(command).toContain(LOG_EXPECTED.message);
+    expect(command).toContain(LOG_EXPECTED.secret);
+    expect(readFileSync(join(dir, "run.sh"), "utf8")).toContain("KUBE_TRIAGE_POD_LOGS=1");
   });
 
   it("CI runs the demo", () => {

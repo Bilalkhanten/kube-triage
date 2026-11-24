@@ -8,6 +8,9 @@ export const EXPECTED = [
   { app: "badprobe", cause: "probe-failure" },
 ];
 
+/** Pod log reading (KUBE_TRIAGE_POD_LOGS=1): the app whose log line explains its crash, and that line. */
+export const LOG_EXPECTED = { app: "crashlog", message: "payment backend unreachable", secret: "demo-not-a-real-secret" };
+
 /** @returns {string[]} human-readable failures; empty when the timeline is as expected. */
 export function checkTimeline(timeline) {
   const failures = [];
@@ -29,6 +32,11 @@ export function checkTimeline(timeline) {
   for (const h of hypotheses) {
     if (h.evidenceIds.some((id) => !ids.has(id))) failures.push(`likely cause "${h.id}" cites evidence that is not in the timeline`);
   }
+  const logs = entries.filter((e) => e.kind === "k8s.pod.log-pattern" && e.subject?.name?.startsWith(`${LOG_EXPECTED.app}-`));
+  if (!logs.some((e) => e.summary.includes(LOG_EXPECTED.message))) {
+    failures.push(`no pod log evidence about ${LOG_EXPECTED.app} containing "${LOG_EXPECTED.message}"`);
+  }
+  if (JSON.stringify(timeline).includes(LOG_EXPECTED.secret)) failures.push("a secret from a pod log reached the timeline unredacted");
   const sources = new Set(entries.map((e) => e.source));
   if (!sources.has("kubernetes")) failures.push("no evidence from the kubernetes connector");
   if (!sources.has("prometheus")) failures.push("no evidence from the prometheus connector");
@@ -44,5 +52,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error(`Demo assertions failed:\n${failures.map((f) => `  - ${f}`).join("\n")}`);
     process.exit(1);
   }
-  console.log(`Demo assertions passed (${EXPECTED.length} expected causes found).`);
+  console.log(`Demo assertions passed (${EXPECTED.length} expected causes and the pod log evidence found).`);
 }

@@ -27,7 +27,8 @@ until [ "$(kubectl --context "$CONTEXT" -n demo get pods -o json | node -e '
     const oom=st.some(c=>c.lastState?.terminated?.reason==="OOMKilled");
     const img=st.some(c=>["ErrImagePull","ImagePullBackOff"].includes(c.state?.waiting?.reason));
     const probe=pods.some(p=>p.metadata.name.startsWith("badprobe-")&&st.some(c=>c.restartCount>0));
-    console.log(oom&&img&&probe?"ready":"waiting");
+    const logc=pods.some(p=>p.metadata.name.startsWith("crashlog-")&&st.some(c=>c.restartCount>0));
+    console.log(oom&&img&&probe&&logc?"ready":"waiting");
   });')" = "ready" ]; do
   if [ "$SECONDS" -ge "$deadline" ]; then
     echo "Timed out waiting for the broken apps to fail" >&2
@@ -44,7 +45,7 @@ pf=$!
 trap 'kill $pf 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -fs http://127.0.0.1:19090/-/ready >/dev/null && break; sleep 1; done
 
-node packages/cli/dist/bin.js investigate -n demo --since 30m \
+KUBE_TRIAGE_POD_LOGS=1 node packages/cli/dist/bin.js investigate -n demo --since 30m \
   --context "$CONTEXT" --prometheus-url http://127.0.0.1:19090 \
   --runbooks runbooks --json > demo-timeline.json
 node demo/assert-timeline.mjs < demo-timeline.json

@@ -1,4 +1,4 @@
-# Three deliberately broken workloads, one per failure the investigation should recognise.
+# Four deliberately broken workloads, one per failure the investigation should recognise.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -72,5 +72,28 @@ spec:
             initialDelaySeconds: 2
             periodSeconds: 3
             failureThreshold: 1
+          resources:
+            requests: { memory: 16Mi, cpu: 10m }
+---
+# Logs an error (with a fake credential that must be redacted) and exits non-zero, so the kubelet
+# restarts it. Only its log line explains the failure; used to check pod log reading live.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashlog
+  namespace: demo
+  labels: { app: crashlog }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: crashlog }
+  template:
+    metadata:
+      labels: { app: crashlog }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c", "echo 'ERROR payment backend unreachable token=demo-not-a-real-secret-0123456789'; sleep 2; exit 1"]
           resources:
             requests: { memory: 16Mi, cpu: 10m }

@@ -68,7 +68,8 @@ Likely causes
   its own app, with evidence from both the Kubernetes and Prometheus connectors. It passed on CI run
   #19 (commit bf83996) after one bug a live API server exposed was fixed (unset fields sent as
   `null`). That is one passing run on a small cluster; it has not been repeated enough to say how
-  stable it is.
+  stable it is. The demo has since gained a fourth app and a live pod log assertion (backlog 2c); that
+  addition is written and unit-tested but has not yet run on a cluster.
 - **Not verified against anything live:** Loki, the GitHub API, pod log reading
   (`KUBE_TRIAGE_POD_LOGS`) and namespaced RBAC on a real cluster.
 

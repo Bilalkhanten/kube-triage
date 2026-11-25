@@ -106,6 +106,15 @@ describe("demo manifests", () => {
     expect(readFileSync(join(dir, "run.sh"), "utf8")).toContain("KUBE_TRIAGE_POD_LOGS=1");
   });
 
+  it("the failure diagnostics only list pods and read logs, and CI runs them on failure", () => {
+    const script = readFileSync(join(dir, "debug-pod-logs.mjs"), "utf8");
+    expect(script).toContain("listPods");
+    expect(script).toContain("readPodLog");
+    expect(script).not.toMatch(/\.(create|patch|delete|replace)\w*\(/);
+    const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+    expect(ci).toMatch(/if: failure\(\)[\s\S]*node demo\/debug-pod-logs\.mjs/);
+  });
+
   it("CI runs the demo", () => {
     expect(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")).toContain("demo/run.sh");
   });

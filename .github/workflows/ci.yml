@@ -110,6 +110,8 @@ jobs:
           kubectl get pods -A || true
           kubectl -n demo describe pods || true
           cat demo-timeline.json || true
+          kubectl -n demo logs deploy/crashlog --previous --timestamps || true
+          node demo/debug-pod-logs.mjs || true
 
   images:
     runs-on: ubuntu-latest

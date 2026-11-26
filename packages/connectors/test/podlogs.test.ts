@@ -119,6 +119,39 @@ describe("pod logs", () => {
     expect(evidence.some((e) => e.kind === "k8s.pod.container-state")).toBe(true);
   });
 
+  it("falls back to the current instance when the previous read returns the kubelet's failure text", async () => {
+    // Observed on a kind cluster (CI #23): a 200 whose body is only this sentence.
+    const { reader, requests } = readerWith([crashed("checkout-abc")], {
+      "checkout-abc:previous": "unable to retrieve container logs for containerd://517c018c0c40",
+      "checkout-abc": log("2026-01-01T10:19:58.123Z", "ERROR payment backend unreachable token=demo-not-a-real-secret-0123456789"),
+    });
+    const evidence = await new KubernetesConnector({ reader, podLogs: {} }).collect(scope);
+    expect(requests.map((r) => r.previous)).toEqual([true, false]);
+    const logs = evidence.filter((e) => e.kind === "k8s.pod.log-pattern");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.summary).toContain("payment backend unreachable");
+    expect(JSON.stringify(evidence)).not.toContain("demo-not-a-real-secret");
+    expect(evidence.some((e) => e.kind === "k8s.pod.log-unavailable")).toBe(false);
+  });
+
+  it("falls back to the current instance when the previous read fails", async () => {
+    const { reader } = readerWith([crashed("checkout-abc")], {
+      "checkout-abc:previous": new Error("previous terminated container not found"),
+      "checkout-abc": log("2026-01-01T10:19:58Z", "ERROR boom"),
+    });
+    const evidence = await new KubernetesConnector({ reader, podLogs: {} }).collect(scope);
+    expect(evidence.some((e) => e.kind === "k8s.pod.log-pattern")).toBe(true);
+    expect(evidence.some((e) => e.kind === "k8s.pod.log-unavailable")).toBe(false);
+  });
+
+  it("reports the kubelet failure text when the current instance has no logs either", async () => {
+    const { reader } = readerWith([crashed("checkout-abc")], {
+      "checkout-abc:previous": "unable to retrieve container logs for containerd://517c018c0c40",
+    });
+    const evidence = await new KubernetesConnector({ reader, podLogs: {} }).collect(scope);
+    expect(evidence.find((e) => e.kind === "k8s.pod.log-unavailable")?.summary).toContain("unable to retrieve container logs");
+  });
+
   it("caps how many pods are read", async () => {
     const pods = ["a", "b", "c", "d"].map((n) => crashed(`checkout-${n}`));
     const { reader, requests } = readerWith(pods, {});

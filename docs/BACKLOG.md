@@ -36,11 +36,14 @@ test in CI does that.
   mismatch with `previous` log reads), then re-run the job.
   *Done when:* the log-based cause is asserted in a passing CI run and at least five consecutive
   `demo` runs pass; README's "Not verified" list drops pod logs.
-  *Finding (CI #22, 441d9c9):* every other demo assertion passed, but the timeline held no pod log
-  evidence for `crashlog` (no `k8s.pod.log-pattern` and no `log-unavailable` entry either), and the
-  cause is not visible from the code or the unit tests. The failure step now also prints
-  `kubectl logs --previous` and the raw result of the connector's own log read
-  (`demo/debug-pod-logs.mjs`). Next run: read that output on the next `demo` failure and fix the cause.
+  *Finding (CI #22, 441d9c9):* no pod log evidence for `crashlog`. *Cause found from CI #23
+  (7629dfd):* the API server answered the `previous=true` read with a 200 whose body was only
+  `unable to retrieve container logs for containerd://...`, which the connector treated as log text
+  with no error lines; the current container's log (which held the expected line) was never read.
+  *Fix (written, covered by unit tests; not yet run on a cluster):* the connector now treats that text
+  or a failed read as "previous unavailable" and falls back to the current instance, reporting the
+  original failure only if the current instance has no logs either. Next run: confirm the `demo` job
+  passes on the push that carries this fix, then count stability runs.
 - [x] **3. Scenario test suite.** 20 scenarios through the real connectors and engine, each with the
   expected top likely cause; the suite reports a pass rate. Add a scenario whenever a diagnosis bug is found.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and

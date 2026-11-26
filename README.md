@@ -101,7 +101,8 @@ Credentials are only ever read from the environment, never from arguments or too
 `KUBE_TRIAGE_DISABLE=loki,github-deploys` skips connectors by name. `KUBE_TRIAGE_RUNBOOKS=<dir>` sets the runbook directory.
 
 **Pod logs** are opt-in (`KUBE_TRIAGE_POD_LOGS=1`) because they need the extra `pods/log` permission and logs can be
-sensitive. It reads the recent logs of crashing or restarted pods only (the previous instance first, at most five
+sensitive. It reads the recent logs of crashing or restarted pods only (the previous instance first, falling back to
+the current one when the previous instance's logs are gone or the kubelet answers "unable to retrieve container logs"; at most five
 pods, a tail limit and a 64 KB cap), keeps only error lines, groups repeats, redacts secrets, and reports a pod whose
 logs it cannot read as an info item instead of failing. Loki and pod logs read the same lines, so confidence counts
 them as one origin, not two witnesses.

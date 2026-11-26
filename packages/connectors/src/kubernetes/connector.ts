@@ -69,9 +69,9 @@ export class KubernetesConnector implements Connector {
     for (const t of targets) {
       let text: string;
       try {
-        text = await read({ namespace: scope.namespace, pod: t.pod, container: t.container, previous: t.previous, tailLines: config.tailLines }, signal);
+        text = await readWithFallback(read, { namespace: scope.namespace, pod: t.pod, container: t.container, previous: t.previous, tailLines: config.tailLines }, signal);
       } catch (error) {
-        // A pod whose logs cannot be read (no previous instance, permission) must not hide the rest.
+        // A pod whose logs cannot be read (permission, no instance at all) must not hide the rest.
         out.push({
           id: `kubernetes:pod:${t.pod}:${t.container}:log-unavailable`,
           source: "kubernetes",
@@ -97,6 +97,39 @@ export class KubernetesConnector implements Connector {
     }
     return out;
   }
+}
+
+type LogRead = NonNullable<KubeReader["readPodLog"]>;
+
+/**
+ * The kubelet can answer a read of a previous instance with a 200 whose body is only
+ * "unable to retrieve container logs for containerd://...", for example once the old container is
+ * garbage-collected. That is not log content, so it is treated like a failed read.
+ */
+const LOG_RETRIEVAL_FAILURE = /^unable to retrieve container logs for /i;
+
+/**
+ * Reads the previous instance first and falls back to the current one when that yields nothing
+ * usable. If the current instance has no logs either, the original failure is reported.
+ */
+async function readWithFallback(read: LogRead, request: Parameters<LogRead>[0], signal?: AbortSignal): Promise<string> {
+  if (!request.previous) return read(request, signal);
+  let failure: Error;
+  try {
+    const text = await read(request, signal);
+    if (!LOG_RETRIEVAL_FAILURE.test(text.trim())) return text;
+    failure = new Error(text.trim());
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+  }
+  let current: string;
+  try {
+    current = await read({ ...request, previous: false }, signal);
+  } catch {
+    throw failure;
+  }
+  if (current.trim() === "") throw failure;
+  return current;
 }
 
 function matchesService(name: string, labels: Record<string, string> | undefined, service?: string): boolean {

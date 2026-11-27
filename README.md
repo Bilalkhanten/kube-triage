@@ -68,10 +68,14 @@ Likely causes
   its own app, with evidence from both the Kubernetes and Prometheus connectors. It passed on CI run
   #19 (commit bf83996) after one bug a live API server exposed was fixed (unset fields sent as
   `null`). That is one passing run on a small cluster; it has not been repeated enough to say how
-  stable it is. The demo has since gained a fourth app and a live pod log assertion (backlog 2c); that
-  addition is written and unit-tested but has not yet run on a cluster.
-- **Not verified against anything live:** Loki, the GitHub API, pod log reading
-  (`KUBE_TRIAGE_POD_LOGS`) and namespaced RBAC on a real cluster.
+  stable it is. The demo has since gained a fourth app (`crashlog`) and a live pod log assertion
+  (backlog 2c). Two runs failed first (CI #22, #23): the API server answered the `previous=true` log
+  read with a 200 whose body was only `unable to retrieve container logs for ...`, which the connector
+  treated as log text. After the connector was changed to fall back to the current instance's log, the
+  `demo` job passed on CI run #24 (commit d278464) with the pod log assertion included, so pod log
+  reading, redaction of the fake credential and the fallback have each passed on a real cluster once.
+  Stability over repeated runs is still being counted (backlog 2d).
+- **Not verified against anything live:** Loki, the GitHub API and namespaced RBAC on a real cluster.
 
 ## Quick start (CLI)
 

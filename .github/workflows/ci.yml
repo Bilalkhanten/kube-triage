@@ -113,6 +113,39 @@ jobs:
           kubectl -n demo logs deploy/crashlog --previous --timestamps || true
           node demo/debug-pod-logs.mjs || true
 
+  dashboard-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Real API and PostgreSQL behind the built dashboard. Throwaway, CI-only credentials.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm build:web
+      - run: pnpm --filter @kube-triage/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @kube-triage/web test:e2e
+
   images:
     runs-on: ubuntu-latest
     timeout-minutes: 25

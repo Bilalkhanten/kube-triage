@@ -48,6 +48,10 @@ test in CI does that.
 - [ ] **4. Dashboard end-to-end test in CI.** Playwright against the built dashboard, the API and
   the CI PostgreSQL: the list and a detail page render, an unreachable API shows the error page, a
   bad id gives 404, and no horizontal overflow at phone width. *Done when:* the job passes in CI.
+  *Status:* written (`packages/web/e2e`, `dashboard-e2e` CI job) and the six tests pass locally
+  against a real PostgreSQL 16, the built API and the built dashboard. The CI job itself has not
+  run yet; tick this item when it passes, and fix whatever the runner shows (for example browser
+  install) if it does not.
 
 ## Evidence quality
 

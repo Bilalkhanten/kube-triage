@@ -58,7 +58,9 @@ Likely causes
   rate limits, the concurrency cap, retention and audit anchoring.
 - **The dashboard** was built and viewed in a real browser (light, dark and phone width) against the
   API running on real PostgreSQL, and its standalone build was run as a non-root user on a
-  read-only filesystem. There is no automated browser test in CI yet.
+  read-only filesystem. A Playwright test (`packages/web/e2e`, six tests: list, detail, unreachable API,
+  404s, phone-width overflow) passed locally against PostgreSQL 16, the built API and the built dashboard;
+  its `dashboard-e2e` CI job has not run yet.
 - **The Helm chart** is covered by static tests (read-only RBAC, every referenced value exists, balanced
   template blocks, secure defaults). `helm lint`, `helm template` and the image builds run in CI; they
   have not been run on a developer machine.
@@ -251,11 +253,13 @@ pnpm build       # tsc -b
 pnpm typecheck   # builds the libraries, then checks sources, tests and the dashboard (works on a fresh clone)
 pnpm test        # vitest, runs against source; API tests need DATABASE_URL and skip without it
 pnpm build:web   # next build
+pnpm --filter @kube-triage/web exec playwright install chromium
+pnpm --filter @kube-triage/web test:e2e   # dashboard browser test; needs DATABASE_URL and both builds
 ```
 
 ## Roadmap
 
-See [docs/BACKLOG.md](docs/BACKLOG.md). Next: a dashboard browser test in CI, node, HPA and PVC evidence, an optional
+See [docs/BACKLOG.md](docs/BACKLOG.md). Next: confirm the dashboard browser test in CI, node, HPA and PVC evidence, an optional
 LLM summary layer that is off by default, and actions that need explicit approval and are audit-logged.
 
 ## License
